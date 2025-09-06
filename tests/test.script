@@ -1,3 +1,0 @@
-create demo.img --size 256MiB --mbr
-part add demo.img --index 1 --type 0x0C --start 1MiB --size 32MiB
-mbr print demo.img

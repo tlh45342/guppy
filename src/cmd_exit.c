@@ -1,6 +1,8 @@
-#include <stdio.h>
+// src/cmd_exit.c
+#include "cmd.h"
+
 int cmd_exit(int argc, char **argv) {
     (void)argc; (void)argv;
-    puts("Type 'exit' at the REPL prompt to quit (built-in).");
-    return 0;
+    guppy_request_exit();
+    return GUPPY_RC_EXIT;  // tell caller loops to unwind
 }

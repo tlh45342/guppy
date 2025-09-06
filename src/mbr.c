@@ -45,15 +45,15 @@ int mbr_init_empty(const char* img_path) {
     memset(buf, 0, sizeof(buf));
     buf[MBR_SIG_OFFSET]     = 0x55;
     buf[MBR_SIG_OFFSET + 1] = 0xAA;
-    return file_write_at(buf, sizeof(buf), 0, img_path);
+    return file_write_at_path(img_path, 0, buf, sizeof buf);
 }
 
 int mbr_read(unsigned char out[MBR_SIZE], const char* img_path) {
-    return file_read_at(out, MBR_SIZE, 0, img_path);
+    return file_read_at_path(img_path, 0, out, MBR_SIZE);
 }
 
 int mbr_write(const unsigned char mbr[MBR_SIZE], const char* img_path) {
-    return file_write_at(mbr, MBR_SIZE, 0, img_path);
+    return file_write_at_path(img_path, 0, mbr, MBR_SIZE);
 }
 
 int mbr_add_partition(const char* img_path, int index, uint8_t type,

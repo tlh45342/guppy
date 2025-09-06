@@ -1,6 +1,6 @@
 # Compiler / flags
 CC       ?= gcc
-CFLAGS   ?= -Wall -Wextra -O2 -std=c11 -D_FILE_OFFSET_BITS=64
+CFLAGS = -Wall -Wextra -O2 -std=c11 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE
 CPPFLAGS ?=
 LDFLAGS  ?=
 

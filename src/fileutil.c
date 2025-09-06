@@ -1,82 +1,104 @@
+// src/fileutil.c
 #include <stdio.h>
-#include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+
 #include "fileutil.h"
 
-// ----- portable 64-bit seek wrappers -----
-static int fseek64(FILE* f, uint64_t off) {
-#if defined(_WIN32) || defined(_WIN64)
-    // MSVC / MinGW provide 64-bit seek as _fseeki64
+#ifndef SECTOR_SIZE
+#define SECTOR_SIZE 512
+#endif
+
+/* Seek to a 64-bit file offset. Returns 0 on success, non-zero on failure. */
+int fseek64(FILE *f, uint64_t off) {
+#if defined(_WIN32) && !defined(__CYGWIN__)
     return _fseeki64(f, (long long)off, SEEK_SET);
 #else
-    // POSIX: use fseeko with off_t (typically 64-bit on LP64 / LFS)
     return fseeko(f, (off_t)off, SEEK_SET);
 #endif
 }
 
-static uint64_t ftell64(FILE* f) {
-#if defined(_WIN32) || defined(_WIN64)
-    return (uint64_t)_ftelli64(f);
-#else
-    return (uint64_t)ftello(f);
-#endif
-}
+/* Ensure that the file is at least `size` bytes long.
+   Creates or extends with zeros if needed. */
+int file_ensure_size(const char *path, uint64_t size) {
+    FILE *f = fopen(path, "r+b");
+    if (!f) f = fopen(path, "w+b");
+    if (!f) return -1;
 
-// Ensure file exists and is exactly `size` bytes.
-// We extend by seeking to size-1 and writing a zero byte.
-int file_ensure_size(const char* path, uint64_t size) {
-    FILE* f = fopen(path, "rb+");
-    if (!f) {
-        f = fopen(path, "wb+");
-        if (!f) return -1;
+    if (fseek64(f, size - 1) != 0) {
+        fclose(f);
+        return -1;
     }
 
-    // If size == 0, just truncate by reopening "wb+".
-    if (size == 0) {
+    unsigned char zero = 0;
+    if (fwrite(&zero, 1, 1, f) != 1) {
         fclose(f);
-        f = fopen(path, "wb+");
-        if (!f) return -1;
-        fclose(f);
-        return 0;
+        return -1;
     }
-
-    if (fseek64(f, size - 1) != 0) { fclose(f); return -1; }
-    unsigned char z = 0;
-    size_t n = fwrite(&z, 1, 1, f);
-    if (n != 1) { fclose(f); return -1; }
 
     fflush(f);
-#if !defined(_WIN32) && !defined(_WIN64)
-    // Best effort flush to disk on POSIX
-    // (on Windows, fflush is typically enough here for simple tooling)
-    // fsync(fileno(f));  // optional; add <unistd.h> if you enable this
-#endif
     fclose(f);
     return 0;
 }
 
-int file_read_at(void* buf, size_t bytes, uint64_t off, const char* path) {
-    if (bytes == 0) return 0;
-    FILE* f = fopen(path, "rb");
-    if (!f) return -1;
+/* read exactly n bytes at absolute file offset 'off' */
+int file_read_at(FILE *f, uint64_t off, void *buf, size_t n) {
+    if (!f || !buf || n == 0) return -1;
+    if (fseek64(f, off) != 0) return -1;
 
-    if (fseek64(f, off) != 0) { fclose(f); return -1; }
-    size_t n = fread(buf, 1, bytes, f);
-    fclose(f);
-    return (n == bytes) ? 0 : -1;
+    unsigned char *p = (unsigned char *)buf;
+    size_t remain = n;
+    while (remain) {
+        size_t got = fread(p, 1, remain, f);
+        if (got == 0) {
+            if (ferror(f)) return -1;
+            /* EOF before full read */
+            return -1;
+        }
+        p += got;
+        remain -= got;
+    }
+    return 0;
 }
 
-int file_write_at(const void* buf, size_t bytes, uint64_t off, const char* path) {
-    if (bytes == 0) return 0;
-    FILE* f = fopen(path, "rb+");
-    if (!f) {
-        f = fopen(path, "wb+");
-        if (!f) return -1;
+/* write exactly n bytes at absolute file offset 'off' */
+int file_write_at(FILE *f, uint64_t off, const void *buf, size_t n) {
+    if (!f || !buf || n == 0) return -1;
+    if (fseek64(f, off) != 0) return -1;
+
+    const unsigned char *p = (const unsigned char *)buf;
+    size_t remain = n;
+    while (remain) {
+        size_t put = fwrite(p, 1, remain, f);
+        if (put == 0) return -1;
+        p += put;
+        remain -= put;
     }
-    if (fseek64(f, off) != 0) { fclose(f); return -1; }
-    size_t n = fwrite(buf, 1, bytes, f);
-    fflush(f);
+    return 0;
+}
+
+int file_read_at_path(const char *path, uint64_t off, void *buf, size_t n) {
+    if (!path || !buf) return -1;
+    FILE *f = fopen(path, "rb");
+    if (!f) return -1;
+    int rc = file_read_at(f, off, buf, n);
     fclose(f);
-    return (n == bytes) ? 0 : -1;
+    return rc;
+}
+
+int file_write_at_path(const char *path, uint64_t off, const void *buf, size_t n) {
+    if (!path || !buf) return -1;
+    FILE *f = fopen(path, "r+b");
+    if (!f) f = fopen(path, "w+b");
+    if (!f) return -1;
+    int rc = file_write_at(f, off, buf, n);
+    fflush(f);
+#if defined(_WIN32) && !defined(__CYGWIN__)
+    _commit(_fileno(f)); /* best-effort */
+#endif
+    fclose(f);
+    return rc;
 }

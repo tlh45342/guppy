@@ -8,6 +8,8 @@
 #include <inttypes.h>
 #include <ctype.h>
 #include <errno.h>
+#include <stdio.h>   // fseeko, ftello
+#include <stdint.h>
 
 #include "cmd.h"  // declare: int cmd_parted(int argc, char** argv);
 
