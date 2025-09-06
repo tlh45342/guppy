@@ -1,8 +1,25 @@
 ## README.md
 
+# Guppy
+
+Tiny, pragmatic disk-image tinkering tool. Create images, map them to simple `/dev/*` names, lay down MBR/GPT, and (soon) make filesystems — all from a friendly REPL or one-shot CLI. Scriptable.
+
+## Why Guppy?
+
+- **Lightweight**: single binary, C11.
+- **Deterministic**: no magic; prints what it writes.
+- **Image-first**: safe defaults; works on files, not real disks.
+- **Ergonomic**: REPL, scripts, and clear subcommands.
+
+------
+
+## Build
+
+Prereqs: a C toolchain (gcc/clang), `make`.
+
 ## WARNING
 
-This is SO alpha.  This is very immature.
+This is SO alpha.  This is very immature. But... it's starting nicely.  Will be dropping in formating and filesystem commands soon.  This is necessary because "fish" tools generally are not available on Windows.  Plus this is being designed to be a scriptable shell.  So yes, automate the create of an entire system.
 
 ## INSTALLATION
 
@@ -17,14 +34,25 @@ make ; make install
 
 This has NOT been tested hardly at all.  Use at your own risk.  Do NOT use this on a production system.
 
+# Guppy
 
+Tiny, pragmatic disk-image tinkering tool. Create images, map them to simple `/dev/*` names, lay down MBR/GPT, and (soon) make filesystems — all from a friendly REPL or one-shot CLI.
 
-guppy create image.img --size 20MiB
+## Why Guppy?
 
-guppy gpt init disk.img --entries 128 --sector 512
+- **Lightweight**: single binary, C11.
+- **Deterministic**: no magic; prints what it writes.
+- **Image-first**: safe defaults; works on files, not real disks.
+- **Ergonomic**: REPL, scripts, and clear subcommands.
 
-# 512 MiB EFI System Partition (FAT32)
-guppy gpt add disk.img --type esp --name "EFI System" --start 1MiB --size 512MiB --align 1MiB
+------
 
-# Rest of disk as Linux filesystem
-guppy gpt add disk.img --type linuxfs --name "rootfs" --start 513MiB --size 100%
+## Build
+
+Prereqs: a C toolchain (gcc/clang), `make`..
+
+------
+
+## Test
+
+Test directory contains testing/automation scripts.
