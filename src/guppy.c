@@ -10,8 +10,9 @@
 #include "helper.h"
 #include "fileutil.h"
 #include "mbr.h"
+#include "cmd.h"     // declares run_command_line()
 
-#define GUPPY_VERSION "0.0.3"
+#define GUPPY_VERSION "0.0.4"
 #define SECTOR_SIZE   512
 
 // ---- forward decls used in this TU ----

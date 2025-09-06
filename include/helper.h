@@ -24,3 +24,4 @@ bool starts_with(const char *s, const char *prefix);
 void rstrip(char *s);
 void lstrip(char *s);
 void trim(char *s);
+

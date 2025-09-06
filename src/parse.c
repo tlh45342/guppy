@@ -4,17 +4,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* --------------------------------------------------------------------------
-   Helpers
-   -------------------------------------------------------------------------- */
-int starts_with(const char *s, const char *prefix) {
-    if (!s || !prefix) return 0;
-    while (*s && *prefix) {
-        if (*s++ != *prefix++) return 0;
-    }
-    return *prefix == '\0';
-}
-
 /* case-insensitive string equality */
 static int eqi(const char *a, const char *b) {
     while (*a && *b) {
