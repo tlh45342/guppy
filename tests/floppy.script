@@ -1,0 +1,12 @@
+; create a 1.44MB floppy image and format it FAT32
+create floppy.img --size 1440KiB
+
+; format directly as FAT32, no partition table
+format floppy.img --fat32 --label "TESTFLOP"
+
+; (optional) copy files
+copy floppy.img hello.txt ::HELLO.TXT
+copy floppy.img readme.md ::README.MD
+
+; print FAT/boot sector information
+fat print floppy.img
