@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <stdio.h>   // fseeko, ftello
 #include <stdint.h>
+#include <sys/types.h> // For Linux?  Grywin didn't barff
 
 #include "cmd.h"  // declare: int cmd_parted(int argc, char** argv);
 
