@@ -1,76 +1,92 @@
-# Compiler / flags
-CC       ?= gcc
-CFLAGS = -Wall -Wextra -O2 -std=c11 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE
-CPPFLAGS ?=
+# ---- configurable ------------------------------------------------------------
+CC       ?= cc
+CSTD     ?= -std=c11
+WARN     ?= -Wall -Wextra
+OPT      ?= -O2
+CPPFLAGS ?= -Iinclude -Isrc
 LDFLAGS  ?=
+LDLIBS   ?=
 
-# Install path (your current setting)
-INSTALL_DIR ?= /cygdrive/c/cygwin64/bin
+# ---- detect OS & set platform flags -----------------------------------------
+UNAME_S := $(shell uname -s 2>/dev/null || echo Unknown)
 
-# Output dirs / target
-BINDIR   ?= bin
-BUILDDIR ?= build
-TARGET   ?= $(BINDIR)/guppy.exe
+# default: no .exe suffix
+EXE :=
 
-# ---- Source discovery ----
-# If you have a src/ layout, use that. Otherwise fall back to root guppy.c.
-ifneq ($(wildcard src/*.c),)
-  SRCDIR   := src
-  INCDIR   := include
-  SOURCES  := $(wildcard $(SRCDIR)/*.c)
-  CPPFLAGS += -I$(SRCDIR) -I$(INCDIR)
-else
-  SRCDIR   := .
-  SOURCES  := guppy.c
+ifeq ($(UNAME_S),Linux)
+  CPPFLAGS += -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE
 endif
 
-OBJECTS := $(patsubst $(SRCDIR)/%.c,$(BUILDDIR)/%.o,$(SOURCES))
+ifeq ($(UNAME_S),Darwin)  # macOS
+  CPPFLAGS += -D_DARWIN_C_SOURCE -D_FILE_OFFSET_BITS=64
+endif
 
-# Tools
-MKDIR_P := mkdir -p
-RM      := rm -f
-CP      := cp
-INSTALL := install
+# Cygwin
+ifneq (,$(findstring CYGWIN,$(UNAME_S)))
+  EXE := .exe
+  CPPFLAGS += -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE
+endif
 
-# Default
-.PHONY: all
-all: $(TARGET)
+# MinGW (Git Bash, MSYS2, etc.)
+ifneq (,$(findstring MINGW,$(UNAME_S)))
+  EXE := .exe
+  CPPFLAGS += -D_FILE_OFFSET_BITS=64 -D__USE_MINGW_ANSI_STDIO=1
+endif
 
-# Link
-$(TARGET): $(OBJECTS) | $(BINDIR)
-	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
+# ---- dirs & files ------------------------------------------------------------
+SRC_DIR   := src
+INC_DIR   := include
+BUILD_DIR := build
+BIN_DIR   := bin
+BIN       := $(BIN_DIR)/guppy$(EXE)
 
-# Compile
-$(BUILDDIR)/%.o: $(SRCDIR)/%.c | $(BUILDDIR)
-	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
+# All C files in src/
+SRCS   := $(wildcard $(SRC_DIR)/*.c)
+OBJS   := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS))
+DEPS   := $(OBJS:.o=.d)
 
-# Dirs
-$(BUILDDIR):
-	$(MKDIR_P) $(BUILDDIR)
+# ---- rules -------------------------------------------------------------------
+.PHONY: all clean run print-os
 
-$(BINDIR):
-	$(MKDIR_P) $(BINDIR)
+all: $(BIN)
 
-# Convenience
-.PHONY: clean distclean run debug release install
+# Final link
+$(BIN): $(OBJS) | $(BIN_DIR)
+	$(CC) $(OBJS) $(LDFLAGS) $(LDLIBS) -o $@
 
+# Compile each .c -> build/.o with dep files
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR) $(INC_DIR)/version.h
+	$(CC) $(CSTD) $(WARN) $(OPT) $(CPPFLAGS) -MMD -MP -c $< -o $@
+
+# Auto-generate a simple version header (from git describe, or fallback)
+$(INC_DIR)/version.h:
+	@mkdir -p $(INC_DIR)
+	@echo '/* auto-generated; do not edit */' > $(INC_DIR)/version.h
+	@echo '#pragma once' >> $(INC_DIR)/version.h
+	@echo -n '#define GUPPY_VERSION "' >> $(INC_DIR)/version.h
+	@{ git describe --tags --always --dirty 2>/dev/null || echo 0.0.0; } >> $(INC_DIR)/version.h
+	@echo '"' >> $(INC_DIR)/version.h
+
+# Create build/bin directories if missing
+$(BUILD_DIR):
+	@mkdir -p $(BUILD_DIR)
+
+$(BIN_DIR):
+	@mkdir -p $(BIN_DIR)
+
+# Convenience: run the REPL
+run: $(BIN)
+	@$(BIN)
+
+# Show what OS the Makefile detected
+print-os:
+	@echo "UNAME_S=$(UNAME_S)  EXE=$(EXE)"
+
+# Clean
 clean:
-	$(RM) $(OBJECTS) $(TARGET)
+	@rm -f $(BUILD_DIR)/*.o $(BUILD_DIR)/*.d $(BIN)
+	@rmdir $(BUILD_DIR) 2>/dev/null || true
+	@rmdir $(BIN_DIR) 2>/dev/null || true
 
-distclean: clean
-	-$(RM) -r $(BUILDDIR) $(BINDIR)
-
-# Quick run (if your app has no args)
-run: $(TARGET)
-	$(TARGET)
-
-# Build types
-debug: CFLAGS := -Wall -Wextra -Og -g -std=c11
-debug: clean all
-
-release: CFLAGS := -Wall -Wextra -O2 -DNDEBUG -std=c11
-release: clean all
-
-# Install (needs admin rights if INSTALL_DIR is system-wide)
-install: $(TARGET)
-	$(INSTALL) -m 755 $(TARGET) $(INSTALL_DIR)
+# Include auto-generated dependency files
+-include $(DEPS)

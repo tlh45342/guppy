@@ -15,11 +15,13 @@ Tiny, pragmatic disk-image tinkering tool. Create images, map them to simple `/d
 
 ## Build
 
-Prereqs: a C toolchain (gcc/clang), `make`.
+Prereqs: a C toolchain (gcc/clang), `make`.  This is designed (and tested) to be cross platform
+
+Testing in Windows/CYGWIN, Linux, MacOS/GCC
 
 ## WARNING
 
-This is SO alpha.  This is very immature. But... it's starting nicely.  Will be dropping in formating and filesystem commands soon.  This is necessary because "fish" tools generally are not available on Windows.  Plus this is being designed to be a scriptable shell.  So yes, automate the create of an entire system.
+This is SO alpha.  This is very immature. But... it's starting nicely.  Will be dropping in formatting and filesystem commands soon.  This is necessary because "fish" tools generally are not available on Windows.  Plus this is being designed to be a scriptable shell.  So yes, automate the create of an entire system.
 
 ## INSTALLATION
 
