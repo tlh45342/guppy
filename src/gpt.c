@@ -343,3 +343,24 @@ int gpt_add_partition_lba(const char *path,
     free(ents);
     return 0;
 }
+
+int gpt_find_single_partition(const char *image_path) {
+    if (!image_path) return 0;
+
+    GptHeader hdr;
+    if (!gpt_read_header(image_path, &hdr, 1)) return 0;
+
+    GptEntry *ents = NULL;
+    if (!gpt_read_entries(image_path, &hdr, &ents)) return 0;
+
+    int found = 0;
+    for (uint32_t i = 0; i < hdr.num_part_entries; ++i) {
+        const GptEntry *e = &ents[i];
+        if ((e->first_lba || e->last_lba) && e->first_lba <= e->last_lba) {
+            if (found != 0) { found = 0; break; } // ambiguous (more than one)
+            found = (int)i + 1;
+        }
+    }
+    free(ents);
+    return found; // 0 = none/ambiguous/error
+}

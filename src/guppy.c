@@ -9,7 +9,7 @@
 #include "helper.h"
 #include "fileutil.h"
 #include "mbr.h"
-#include "cmd.h"     // declares run_command_line()
+#include "cmds.h"
 #include "version.h"
 
 // ---------- small helpers ----------

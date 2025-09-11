@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 
-#include "cmd.h"
+#include "cmds.h"
 #include "helper.h"
 
 static int s_exit_requested = 0;

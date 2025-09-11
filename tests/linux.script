@@ -1,7 +1,15 @@
 create image.img --size 20MiB
-mount -i image.img /dev/a
-mount
-gpt init /dev/a --entries 128 --sector 512
+use -i image.img /dev/a
+use
+gpt init /dev/a 
 gpt add  /dev/a --type linuxfs --name "rootfs" --start 1MiB --size 100%
 gpt print /dev/a
-mkfs.ext2 /dev/a --part 1 --label rootfs 
+mkfs.ext2 /dev/a --part 1 --label rootfs
+mount /dev/a1 /
+mount
+pwd
+ls -la
+use -i disc.iso /dev/b
+mkdir /mnt
+mount /dev/b /mnt
+cp /mnt/hello.txt /hello.txt

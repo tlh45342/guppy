@@ -1,116 +1,191 @@
-// src/cmd_mount.c
+// cmd_mount.c — guppy mount command (ext2 partitions and ISO9660 images)
+
 #include <stdio.h>
 #include <string.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <ctype.h>
-#include <stdlib.h>   // free
+#include <stdlib.h>
 
-#include "cmd.h"
-#include "use.h"
+#include "devmap.h"
+#include "mnttab.h"
 #include "gpt.h"
+#include "fs_probe.h"
+#include "devutil.h"   // dev_split()
 
-static bool parse_dev_letter(const char *s, char *out) {
-    if (!s || !*s) return false;
-    if (strncmp(s, "/dev/", 5) == 0 && s[5] && !s[6]) { *out = (char)tolower((unsigned char)s[5]); return true; }
-    if (!s[1] && isalpha((unsigned char)s[0]))        { *out = (char)tolower((unsigned char)s[0]); return true; }
-    return false;
+static void mount_usage(void) {
+    printf("mount                             List mounts\n");
+    printf("mount <dev> <mp> [--part N] [--fstype ext2|iso9660]\n");
+    printf("Examples:\n");
+    printf("  mount /dev/a1 /\n");
+    printf("  mount /dev/a / --part 1 --fstype ext2\n");
+    printf("  mount /dev/b /mnt --fstype iso9660\n");
 }
 
-static void list_one(char letter, const char *path, bool verbose) {
-    if (!verbose) { printf("/dev/%c  %s\n", letter, path); return; }
+/* ------- List mounts (pretty) ------- */
+static void list_mounts_pretty(void) {
+    const int n = mnttab_count();
+    if (n <= 0) { puts("(no mounts)"); return; }
 
-    printf("/dev/%c  %s\n", letter, path);
+    printf("%-12s %-10s %-6s %-8s %s\n", "Mountpoint", "Device", "Part", "FStype", "Image");
+    printf("%-12s %-10s %-6s %-8s %s\n", "----------", "------", "----", "------", "-----");
 
-    GptHeader h;
-    if (gpt_read_header(path, &h, 1)) {
-        char disk_guid[37]; gpt_guid_to_str(h.disk_guid, disk_guid);
-        printf("  scheme: GPT  disk-guid: %s  entries:%u size:%u  primary@LBA%llu backup@LBA%llu\n",
-               disk_guid,
-               h.num_part_entries, h.part_entry_size,
-               (unsigned long long)h.current_lba,
-               (unsigned long long)h.backup_lba);
+    for (int i = 0; i < n; ++i) {
+        const MountEntry *m = mnttab_get(i);
+        char base[32];
+        int suffix_part = 0;
+        const char *dev_for_img = m->dev;
+        if (dev_split(m->dev, base, sizeof(base), &suffix_part)) dev_for_img = base;
 
-        GptEntry *ents = NULL;
-        if (!gpt_read_entries(path, &h, &ents)) { printf("  (failed to read GPT entries)\n"); return; }
-
-        const size_t total = (size_t)h.num_part_entries * (size_t)h.part_entry_size;
-        printf("  Idx   Start LBA       End LBA        Size     Type        Name\n");
-        for (unsigned i = 0; i < h.num_part_entries; i++) {
-            size_t off = (size_t)i * (size_t)h.part_entry_size;
-            if (off + sizeof(GptEntry) > total) break;
-            const GptEntry *e = (const GptEntry*)((const unsigned char*)ents + off);
-
-            bool empty = true; for (int k=0;k<16;k++) if (e->type_guid[k]) { empty=false; break; }
-            if (empty) continue;
-
-            const char *alias = gpt_alias_for_type(e->type_guid);
-            char type_guid[37]; gpt_guid_to_str(e->type_guid, type_guid);
-
-            uint16_t u16name[36];
-            memcpy(u16name, e->name_utf16, sizeof u16name);
-            char name[128]; gpt_utf16le_to_utf8(u16name, 36, name, sizeof name);
-
-            unsigned long long n_lba = (unsigned long long)(e->last_lba - e->first_lba + 1);
-            double size_mb = (double)n_lba * 512.0 / (1024.0*1024.0);
-
-            printf("  %3u  %12llu  %12llu  %8.1fMB  %-10s %s\n",
-                   i+1,
-                   (unsigned long long)e->first_lba,
-                   (unsigned long long)e->last_lba,
-                   size_mb,
-                   alias ? alias : type_guid,
-                   name[0] ? name : "");
+        const char *img = devmap_resolve(dev_for_img);
+        const char *fst = (m->fstype[0] ? m->fstype : "-");
+        if (m->part_index > 0) {
+            printf("%-12s %-10s %-6d %-8s %s\n",
+                   m->mpoint, m->dev, m->part_index, fst, img ? img : "-");
+        } else {
+            if (suffix_part > 0) {
+                printf("%-12s %-10s %-6d %-8s %s\n",
+                       m->mpoint, m->dev, suffix_part, fst, img ? img : "-");
+            } else {
+                printf("%-12s %-10s %-6s %-8s %s\n",
+                       m->mpoint, m->dev, "-", fst, img ? img : "-");
+            }
         }
-        free(ents);
-    } else {
-        printf("  scheme: (unknown / no GPT)\n");
     }
+}
+
+/* ------- Tiny ISO probe (PVD @ LBA 16, id='CD001') ------- */
+/* If you already have this in fs_probe.c, keep using that and drop this. */
+static int probe_iso9660_magic_file(const char *img_path) {
+    /* read 2048 bytes at offset 16 * 2048 */
+    FILE *f = fopen(img_path, "rb");
+    if (!f) return 0;
+    const long off = 16L * 2048L;
+    if (fseek(f, off, SEEK_SET) != 0) { fclose(f); return 0; }
+    unsigned char buf[2048];
+    size_t n = fread(buf, 1, sizeof(buf), f);
+    fclose(f);
+    if (n < 7) return 0;
+    /* Primary Volume Descriptor: type=1, id="CD001", version=1 */
+    if (buf[0] == 1 &&
+        buf[1]=='C' && buf[2]=='D' && buf[3]=='0' && buf[4]=='0' && buf[5]=='1' &&
+        buf[6] == 1) {
+        return 1;
+    }
+    return 0;
 }
 
 int cmd_mount(int argc, char **argv) {
-    // mount                              -> list mapped devices (brief)
-    // mount -v                           -> list mapped devices (verbose GPT)
-    // mount /dev/a                       -> show one (verbose)
-    // mount -i <image> /dev/a [--ro]     -> map image
-    // mount -d /dev/a                    -> unmap
-    bool verbose=false, do_map=false, do_unmap=false, ro=false;
-    const char *img=NULL; char letter=0;
+    if (argc == 1) { list_mounts_pretty(); return 0; }
 
-    for (int i=1;i<argc;i++){
-        if (strcmp(argv[i], "-v")==0) { verbose=true; }
-        else if (strcmp(argv[i], "-i")==0 && i+1<argc) { do_map=true; img=argv[++i]; }
-        else if (strcmp(argv[i], "--ro")==0) { ro=true; }
-        else if (strcmp(argv[i], "-d")==0) { do_unmap=true; }
-        else if (!letter && parse_dev_letter(argv[i], &letter)) { /* ok */ }
-        else if (!img && do_map) { img=argv[i]; }
-        else { fprintf(stderr,"mount: unknown or misplaced arg: %s\n", argv[i]); return 2; }
-    }
+    if (argc >= 3) {
+        const char *dev = argv[1];
+        const char *mp  = argv[2];
 
-    if (do_map) {
-        if (!img || !letter) { fprintf(stderr,"usage: mount -i <image> /dev/<a..z> [--ro]\n"); return 2; }
-        if (!use_add(letter, img, ro)) { fprintf(stderr,"mount: failed to map /dev/%c\n", letter); return 1; }
-        printf("Mapped /dev/%c -> %s%s\n", letter, img, ro ? " [ro]" : "");
+        /* parse optional flags */
+        int part_flag = 0;
+        const char *fstype = "";
+        for (int i = 3; i < argc; ++i) {
+            if (strcmp(argv[i], "--part") == 0 && i + 1 < argc) {
+                part_flag = atoi(argv[++i]);
+            } else if (strcmp(argv[i], "--fstype") == 0 && i + 1 < argc) {
+                fstype = argv[++i];
+            }
+        }
+
+        /* split /dev/a1 into base + part_from_name */
+        char base[32];
+        int part_from_name = 0;
+        if (!dev_split(dev, base, sizeof(base), &part_from_name)) {
+            fprintf(stderr, "mount: '%s' is not a /dev/* device\n", dev);
+            return 2;
+        }
+
+        /* resolve image by base (/dev/a) */
+        const char *img = devmap_resolve(base);
+        if (!img) {
+            fprintf(stderr, "mount: unknown device %s (use -i <img> %s first)\n", base, base);
+            return 2;
+        }
+
+        /* Decide fstype if omitted: try ext2 partition, else ISO9660 */
+        int final_part = 0;
+        int want_iso = 0;
+
+        if (fstype && *fstype) {
+            if (strcmp(fstype, "ext2") == 0) {
+                /* ext2: pick final_part */
+                final_part = part_flag ? part_flag : part_from_name;
+                if (!final_part) {
+                    int only = gpt_find_single_partition(img);
+                    if (only > 0) final_part = only;
+                }
+                if (!final_part) {
+                    fprintf(stderr, "mount: ambiguous/no partition on %s; pass --part N or use /dev/aN\n", base);
+                    return 2;
+                }
+            } else if (strcmp(fstype, "iso9660") == 0) {
+                want_iso = 1;
+                /* For ISO, ignore any partition; warn if someone passed one */
+                int suffix = part_from_name;
+                if (part_flag || suffix) {
+                    fprintf(stderr, "mount: ignoring partition for iso9660 (using whole device %s)\n", base);
+                }
+                final_part = 0;
+            } else {
+                fprintf(stderr, "mount: unsupported --fstype '%s' (try ext2 or iso9660)\n", fstype);
+                return 2;
+            }
+        } else {
+            /* Auto-probe */
+            /* 1) If GPT has a single partition, prefer that (likely ext2) */
+            int only = gpt_find_single_partition(img);
+            if (only > 0) {
+                final_part = only;
+                fstype = "ext2";
+            } else {
+                /* 2) If the device name has a suffix, try that as ext2 */
+                int sug = part_from_name ? part_from_name : part_flag;
+                if (sug > 0) {
+                    uint64_t start_lba=0, total_sectors=0;
+                    if (gpt_get_partition(img, sug, &start_lba, &total_sectors)) {
+                        uint64_t fs_off = start_lba * 512ull;
+                        if (probe_ext2_magic(img, fs_off)) {
+                            final_part = sug;
+                            fstype = "ext2";
+                        }
+                    }
+                }
+                /* 3) Otherwise, see if the whole image looks like an ISO */
+                if (!fstype || !*fstype) {
+                    if (probe_iso9660_magic_file(img)) {
+                        fstype = "iso9660";
+                        want_iso = 1;
+                        final_part = 0;
+                    }
+                }
+            }
+            if (!fstype || !*fstype) {
+                fprintf(stderr, "mount: could not auto-detect FS; specify --fstype ext2|iso9660 (and --part if needed)\n");
+                return 2;
+            }
+        }
+
+        /* Record in mount table */
+        if (!mnttab_add(dev, final_part, fstype, mp)) {
+            fprintf(stderr, "mount: mount table full\n");
+            return 2;
+        }
+
+        /* Pretty print */
+        if (strcmp(fstype, "ext2") == 0) {
+            printf("Mounted %s part=%d on %s (fstype=%s) -> %s\n", dev, final_part, mp, fstype, img);
+        } else if (want_iso) {
+            /* For ISO, show device w/out partition */
+            printf("Mounted %s on %s (fstype=iso9660) -> %s\n", base, mp, img);
+        } else {
+            printf("Mounted %s on %s (fstype=%s) -> %s\n", dev, mp, fstype, img);
+        }
         return 0;
     }
 
-    if (do_unmap) {
-        if (!letter) { fprintf(stderr,"usage: mount -d /dev/<a..z>\n"); return 2; }
-        if (!use_rm(letter)) { fprintf(stderr,"mount: /dev/%c not mapped\n", letter); return 1; }
-        printf("Unmapped /dev/%c\n", letter);
-        return 0;
-    }
-
-    if (letter) {
-        const char *path=NULL;
-        if (!use_get(letter, &path)) { fprintf(stderr,"mount: /dev/%c not mapped\n", letter); return 1; }
-        list_one(letter, path, true);
-        return 0;
-    }
-
-    for (char c='a'; c<='z'; ++c) {
-        const char *path=NULL;
-        if (use_get(c, &path)) list_one(c, path, verbose);
-    }
-    return 0;
+    mount_usage();
+    return 2;
 }

@@ -12,7 +12,7 @@
 #include <stdint.h>
 #include <sys/types.h> // For Linux?  Grywin didn't barff
 
-#include "cmd.h"  // declare: int cmd_parted(int argc, char** argv);
+#include "cmds.h"  // declare: int cmd_parted(int argc, char** argv);
 
 #ifndef SECTOR_SIZE
 #define SECTOR_SIZE 512

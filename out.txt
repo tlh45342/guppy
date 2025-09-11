@@ -1,0 +1,1195 @@
+ Volume in drive O has no label.
+ Volume Serial Number is 54EC-3C73
+
+ Directory of O:\guppy
+
+09/10/2025  08:09 PM    <DIR>          .
+09/10/2025  08:09 PM    <DIR>          ..
+09/06/2025  02:26 PM                66 .gitattributes
+08/16/2025  01:50 PM    <DIR>          doc
+09/10/2025  08:08 PM    <DIR>          include
+09/08/2025  09:24 AM             4,245 Makefile
+09/10/2025  08:09 PM                 0 out.txt
+09/06/2025  09:22 PM             1,284 README.md
+09/10/2025  08:08 PM    <DIR>          src
+09/08/2025  01:28 PM    <DIR>          tests
+               4 File(s)          5,595 bytes
+
+ Directory of O:\guppy\.git
+
+09/06/2025  09:24 PM                 5 COMMIT_EDITMSG
+09/06/2025  02:41 PM               331 config
+09/06/2025  02:26 PM                73 description
+09/07/2025  08:02 AM                93 FETCH_HEAD
+09/06/2025  02:26 PM                21 HEAD
+09/06/2025  02:26 PM    <DIR>          hooks
+09/06/2025  09:24 PM             3,297 index
+09/06/2025  02:26 PM    <DIR>          info
+09/06/2025  02:26 PM    <DIR>          logs
+09/06/2025  03:22 PM    <DIR>          objects
+09/06/2025  02:41 PM    <DIR>          refs
+               6 File(s)          3,820 bytes
+
+ Directory of O:\guppy\.git\hooks
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM               478 applypatch-msg.sample
+09/06/2025  02:26 PM               896 commit-msg.sample
+09/06/2025  02:26 PM             4,726 fsmonitor-watchman.sample
+09/06/2025  02:26 PM               189 post-update.sample
+09/06/2025  02:26 PM               424 pre-applypatch.sample
+09/06/2025  02:26 PM             1,649 pre-commit.sample
+09/06/2025  02:26 PM               416 pre-merge-commit.sample
+09/06/2025  02:26 PM             1,374 pre-push.sample
+09/06/2025  02:26 PM             4,898 pre-rebase.sample
+09/06/2025  02:26 PM               544 pre-receive.sample
+09/06/2025  02:26 PM             1,492 prepare-commit-msg.sample
+09/06/2025  02:26 PM             2,783 push-to-checkout.sample
+09/06/2025  02:26 PM             2,308 sendemail-validate.sample
+09/06/2025  02:26 PM             3,650 update.sample
+              14 File(s)         25,827 bytes
+
+ Directory of O:\guppy\.git\info
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM               240 exclude
+               1 File(s)            240 bytes
+
+ Directory of O:\guppy\.git\logs
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  09:24 PM             1,730 HEAD
+09/06/2025  02:41 PM    <DIR>          refs
+               1 File(s)          1,730 bytes
+
+ Directory of O:\guppy\.git\logs\refs
+
+09/06/2025  02:41 PM    <DIR>          .
+09/06/2025  02:41 PM    <DIR>          ..
+09/06/2025  02:26 PM    <DIR>          heads
+09/06/2025  02:41 PM    <DIR>          remotes
+               0 File(s)              0 bytes
+
+ Directory of O:\guppy\.git\logs\refs\heads
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  09:24 PM             1,730 main
+               1 File(s)          1,730 bytes
+
+ Directory of O:\guppy\.git\logs\refs\remotes
+
+09/06/2025  02:41 PM    <DIR>          .
+09/06/2025  02:41 PM    <DIR>          ..
+09/06/2025  02:41 PM    <DIR>          origin
+               0 File(s)              0 bytes
+
+ Directory of O:\guppy\.git\logs\refs\remotes\origin
+
+09/06/2025  02:41 PM    <DIR>          .
+09/06/2025  02:41 PM    <DIR>          ..
+09/07/2025  08:02 AM             5,365 HEAD
+09/06/2025  09:25 PM             1,575 main
+               2 File(s)          6,940 bytes
+
+ Directory of O:\guppy\.git\objects
+
+09/07/2025  08:02 AM    <DIR>          .
+09/07/2025  08:02 AM    <DIR>          ..
+09/06/2025  07:18 PM    <DIR>          00
+09/06/2025  07:18 PM    <DIR>          02
+09/06/2025  02:49 PM    <DIR>          03
+09/06/2025  07:18 PM    <DIR>          07
+09/06/2025  07:18 PM    <DIR>          0a
+09/06/2025  07:18 PM    <DIR>          0b
+09/06/2025  02:26 PM    <DIR>          0f
+09/06/2025  02:26 PM    <DIR>          10
+09/06/2025  09:24 PM    <DIR>          12
+09/06/2025  02:49 PM    <DIR>          16
+09/06/2025  02:38 PM    <DIR>          17
+09/06/2025  07:18 PM    <DIR>          19
+09/06/2025  07:18 PM    <DIR>          1c
+09/06/2025  07:26 PM    <DIR>          1e
+09/06/2025  07:18 PM    <DIR>          20
+09/06/2025  02:49 PM    <DIR>          21
+09/06/2025  09:24 PM    <DIR>          24
+09/06/2025  07:18 PM    <DIR>          25
+09/06/2025  02:38 PM    <DIR>          26
+09/06/2025  07:18 PM    <DIR>          2a
+09/06/2025  02:26 PM    <DIR>          2e
+09/06/2025  02:26 PM    <DIR>          30
+09/06/2025  02:26 PM    <DIR>          35
+09/06/2025  02:26 PM    <DIR>          38
+09/06/2025  07:18 PM    <DIR>          3b
+09/06/2025  02:26 PM    <DIR>          3d
+09/06/2025  09:04 PM    <DIR>          3e
+09/06/2025  02:49 PM    <DIR>          3f
+09/06/2025  09:10 PM    <DIR>          41
+09/06/2025  07:28 PM    <DIR>          42
+09/06/2025  07:18 PM    <DIR>          43
+09/06/2025  09:10 PM    <DIR>          44
+09/06/2025  09:10 PM    <DIR>          46
+09/06/2025  02:26 PM    <DIR>          47
+09/06/2025  07:28 PM    <DIR>          48
+09/06/2025  02:26 PM    <DIR>          49
+09/06/2025  07:18 PM    <DIR>          4b
+09/06/2025  07:18 PM    <DIR>          51
+09/06/2025  02:26 PM    <DIR>          53
+09/06/2025  09:04 PM    <DIR>          55
+09/06/2025  07:18 PM    <DIR>          5c
+09/06/2025  09:10 PM    <DIR>          5d
+09/06/2025  07:18 PM    <DIR>          62
+09/06/2025  07:18 PM    <DIR>          65
+09/06/2025  02:26 PM    <DIR>          66
+09/06/2025  07:18 PM    <DIR>          68
+09/06/2025  07:18 PM    <DIR>          69
+09/06/2025  07:18 PM    <DIR>          6a
+09/06/2025  02:26 PM    <DIR>          6b
+09/06/2025  02:26 PM    <DIR>          6c
+09/06/2025  02:26 PM    <DIR>          6d
+09/06/2025  07:18 PM    <DIR>          6e
+09/06/2025  02:26 PM    <DIR>          6f
+09/06/2025  07:18 PM    <DIR>          72
+09/06/2025  09:04 PM    <DIR>          73
+09/06/2025  02:26 PM    <DIR>          7a
+09/06/2025  02:26 PM    <DIR>          7c
+09/06/2025  02:26 PM    <DIR>          80
+09/06/2025  09:10 PM    <DIR>          83
+09/06/2025  09:10 PM    <DIR>          84
+09/06/2025  07:18 PM    <DIR>          88
+09/06/2025  07:18 PM    <DIR>          89
+09/06/2025  07:18 PM    <DIR>          8a
+09/06/2025  09:14 PM    <DIR>          8d
+09/06/2025  07:18 PM    <DIR>          8e
+09/06/2025  07:18 PM    <DIR>          8f
+09/06/2025  07:18 PM    <DIR>          96
+09/06/2025  02:26 PM    <DIR>          99
+09/06/2025  02:26 PM    <DIR>          9a
+09/06/2025  02:26 PM    <DIR>          9d
+09/06/2025  07:18 PM    <DIR>          9f
+09/06/2025  09:24 PM    <DIR>          a0
+09/06/2025  07:18 PM    <DIR>          a1
+09/06/2025  09:14 PM    <DIR>          a2
+09/06/2025  02:26 PM    <DIR>          a5
+09/06/2025  07:18 PM    <DIR>          ac
+09/06/2025  07:26 PM    <DIR>          ae
+09/06/2025  02:26 PM    <DIR>          b1
+09/06/2025  09:14 PM    <DIR>          b3
+09/06/2025  02:49 PM    <DIR>          b6
+09/06/2025  09:14 PM    <DIR>          b9
+09/06/2025  07:26 PM    <DIR>          bc
+09/06/2025  02:26 PM    <DIR>          be
+09/06/2025  02:26 PM    <DIR>          bf
+09/06/2025  02:26 PM    <DIR>          c1
+09/06/2025  07:18 PM    <DIR>          c2
+09/06/2025  02:26 PM    <DIR>          c3
+09/06/2025  02:26 PM    <DIR>          c4
+09/06/2025  07:18 PM    <DIR>          c6
+09/06/2025  07:18 PM    <DIR>          c7
+09/06/2025  02:26 PM    <DIR>          c8
+09/06/2025  07:18 PM    <DIR>          c9
+09/06/2025  07:18 PM    <DIR>          ce
+09/06/2025  09:24 PM    <DIR>          d0
+09/06/2025  07:18 PM    <DIR>          d1
+09/06/2025  02:26 PM    <DIR>          d3
+09/06/2025  07:18 PM    <DIR>          d7
+09/06/2025  07:18 PM    <DIR>          da
+09/06/2025  02:26 PM    <DIR>          dd
+09/06/2025  02:26 PM    <DIR>          df
+09/06/2025  02:26 PM    <DIR>          e0
+09/06/2025  09:10 PM    <DIR>          e1
+09/06/2025  02:26 PM    <DIR>          e3
+09/06/2025  07:18 PM    <DIR>          e6
+09/06/2025  09:10 PM    <DIR>          e7
+09/06/2025  07:18 PM    <DIR>          ec
+09/06/2025  07:28 PM    <DIR>          ed
+09/06/2025  07:18 PM    <DIR>          ef
+09/06/2025  02:26 PM    <DIR>          f0
+09/06/2025  07:18 PM    <DIR>          f2
+09/06/2025  07:18 PM    <DIR>          f4
+09/06/2025  02:26 PM    <DIR>          fa
+09/06/2025  02:49 PM    <DIR>          fb
+09/06/2025  07:18 PM    <DIR>          fc
+09/06/2025  07:18 PM    <DIR>          fd
+09/06/2025  02:26 PM    <DIR>          fe
+09/06/2025  02:26 PM    <DIR>          info
+09/06/2025  02:26 PM    <DIR>          pack
+               0 File(s)              0 bytes
+
+ Directory of O:\guppy\.git\objects\00
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM               822 0346461cebf034762ab73c0592773a47834365
+09/06/2025  07:18 PM             4,345 492f1046acd591d6d955d4e19ea38dd3c34abd
+               2 File(s)          5,167 bytes
+
+ Directory of O:\guppy\.git\objects\02
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM               288 bfc3142d19fecca9c6c551304bb662496bc5f2
+               1 File(s)            288 bytes
+
+ Directory of O:\guppy\.git\objects\03
+
+09/06/2025  02:49 PM    <DIR>          .
+09/06/2025  02:49 PM    <DIR>          ..
+09/06/2025  02:49 PM               178 cfb285b24731da6d1a95527fc99990a1af0494
+               1 File(s)            178 bytes
+
+ Directory of O:\guppy\.git\objects\07
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  02:49 PM               200 b30e3331a8835f84f94ada854db2f44fda7e32
+09/06/2025  07:18 PM             3,599 c05848d72e980e66276684b90e133a4036fd4e
+               2 File(s)          3,799 bytes
+
+ Directory of O:\guppy\.git\objects\0a
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM               596 efcb7b4d3d190b0ebcf9b4cd8642d522281fd9
+               1 File(s)            596 bytes
+
+ Directory of O:\guppy\.git\objects\0b
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM               398 079b2e0b04add55f21ee0dfc2b0c51a31b89a8
+09/06/2025  02:26 PM               379 13fc26484700f97f307e1ea8134d9f3cc1556d
+               2 File(s)            777 bytes
+
+ Directory of O:\guppy\.git\objects\0f
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM               299 4af95916541100f31b9cbbf978fff22c955952
+               1 File(s)            299 bytes
+
+ Directory of O:\guppy\.git\objects\10
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM            27,500 c52b9fcfb30b9d110aadc82d8ee99fde6cc5c0
+               1 File(s)         27,500 bytes
+
+ Directory of O:\guppy\.git\objects\12
+
+09/06/2025  09:24 PM    <DIR>          .
+09/06/2025  09:24 PM    <DIR>          ..
+09/06/2025  09:24 PM               773 7f232e662b29f2b3f73ee4f3b259da0ce9c68b
+               1 File(s)            773 bytes
+
+ Directory of O:\guppy\.git\objects\16
+
+09/06/2025  02:49 PM    <DIR>          .
+09/06/2025  02:49 PM    <DIR>          ..
+09/06/2025  02:49 PM               489 db6ef1e2820b635de6bb042cc33012c89eecfe
+               1 File(s)            489 bytes
+
+ Directory of O:\guppy\.git\objects\17
+
+09/06/2025  02:38 PM    <DIR>          .
+09/06/2025  02:38 PM    <DIR>          ..
+09/06/2025  02:38 PM                28 2ec38627153da25aabebffe89f5384e8537a46
+               1 File(s)             28 bytes
+
+ Directory of O:\guppy\.git\objects\19
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM               167 b4d6605a69eca70f988dcecd8b5407fed68a8d
+               1 File(s)            167 bytes
+
+ Directory of O:\guppy\.git\objects\1c
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM               516 9914d984991bc9001fd7bd2aeb85477e009d3d
+               1 File(s)            516 bytes
+
+ Directory of O:\guppy\.git\objects\1e
+
+09/06/2025  07:26 PM    <DIR>          .
+09/06/2025  07:26 PM    <DIR>          ..
+09/06/2025  07:26 PM               742 197bec444be21ac20100ea7ce4a8c71a2b7e60
+09/06/2025  07:18 PM               797 ca3fa98c1d60c035bc91493f153bdf2c89f867
+               2 File(s)          1,539 bytes
+
+ Directory of O:\guppy\.git\objects\20
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM               164 6e79a2c260c504b8a06c4f22ab4f492f3dd575
+09/06/2025  02:26 PM               129 ec587646a783b65c844bc6002c5b35100a457f
+               2 File(s)            293 bytes
+
+ Directory of O:\guppy\.git\objects\21
+
+09/06/2025  02:49 PM    <DIR>          .
+09/06/2025  02:49 PM    <DIR>          ..
+09/06/2025  02:49 PM             2,911 81faa06df4afcdcdcd68343328d776bc8e88b2
+               1 File(s)          2,911 bytes
+
+ Directory of O:\guppy\.git\objects\24
+
+09/06/2025  09:24 PM    <DIR>          .
+09/06/2025  09:24 PM    <DIR>          ..
+09/06/2025  09:24 PM               178 1f6c753a25220b57dbad70b0c3af6936b71caf
+               1 File(s)            178 bytes
+
+ Directory of O:\guppy\.git\objects\25
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  02:26 PM               496 cf7fff8bedd14872d9d51a7ebc6cfbfc8415c3
+09/06/2025  07:18 PM             1,682 cf828841396f6428a3e36e1fdb83ce3ce2bd27
+               2 File(s)          2,178 bytes
+
+ Directory of O:\guppy\.git\objects\26
+
+09/06/2025  02:38 PM    <DIR>          .
+09/06/2025  02:38 PM    <DIR>          ..
+09/06/2025  02:38 PM               269 28f3e8e4b2e8395d241ba5d27f31f34b9b6343
+               1 File(s)            269 bytes
+
+ Directory of O:\guppy\.git\objects\2a
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM               186 82fb5ef142623ca3ce7b703177cc962e1bcc1c
+               1 File(s)            186 bytes
+
+ Directory of O:\guppy\.git\objects\2e
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM               400 69ec325dac868f1b7d0bd43e3f7be8bcc2fad3
+               1 File(s)            400 bytes
+
+ Directory of O:\guppy\.git\objects\30
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM             1,493 abc8fc17ffe5dea9ee8659ebc42ffa8b465991
+               1 File(s)          1,493 bytes
+
+ Directory of O:\guppy\.git\objects\35
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM             6,469 25e06471c62f6a32c25b18107c303e6ffc219e
+09/06/2025  02:26 PM             2,896 6cf31cb20fbd26b3466f4b2b310a0adbb5d327
+               2 File(s)          9,365 bytes
+
+ Directory of O:\guppy\.git\objects\38
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM               298 8edd390ed2d4f99c547aaf14f74cff671b834b
+               1 File(s)            298 bytes
+
+ Directory of O:\guppy\.git\objects\3b
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM               880 0a755df15c6260ba8f7fe41c754a45fd5c7320
+               1 File(s)            880 bytes
+
+ Directory of O:\guppy\.git\objects\3d
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM             3,330 1ede005023d2f644dc507064b147b470aa8e04
+               1 File(s)          3,330 bytes
+
+ Directory of O:\guppy\.git\objects\3e
+
+09/06/2025  09:04 PM    <DIR>          .
+09/06/2025  09:04 PM    <DIR>          ..
+09/06/2025  09:04 PM               295 6f770b446b53da9aa8910576952c1767febdf6
+               1 File(s)            295 bytes
+
+ Directory of O:\guppy\.git\objects\3f
+
+09/06/2025  02:49 PM    <DIR>          .
+09/06/2025  02:49 PM    <DIR>          ..
+09/06/2025  02:49 PM               412 733780d1827d86706d35682b5990efc798fc1e
+09/06/2025  02:26 PM             3,705 a1544df081cc45d6b4587629c694cad25de32c
+               2 File(s)          4,117 bytes
+
+ Directory of O:\guppy\.git\objects\41
+
+09/06/2025  09:10 PM    <DIR>          .
+09/06/2025  09:10 PM    <DIR>          ..
+09/06/2025  09:10 PM                54 bfec2ed298917010abecc4fc51b5ce23197b59
+               1 File(s)             54 bytes
+
+ Directory of O:\guppy\.git\objects\42
+
+09/06/2025  07:28 PM    <DIR>          .
+09/06/2025  07:28 PM    <DIR>          ..
+09/06/2025  07:28 PM               295 539f4369f7700272c20286a6be61a4ffe0beed
+09/06/2025  02:26 PM               782 ed910a50e85b2eb7e1c092b7823a8a86345dd7
+               2 File(s)          1,077 bytes
+
+ Directory of O:\guppy\.git\objects\43
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM            91,853 10bb4aeb492b9b442ccb78d1d1e9f7b4fe454a
+               1 File(s)         91,853 bytes
+
+ Directory of O:\guppy\.git\objects\44
+
+09/06/2025  09:10 PM    <DIR>          .
+09/06/2025  09:10 PM    <DIR>          ..
+09/06/2025  09:10 PM               295 b69c8cd763d7070bf6609c72d42504d9072e37
+               1 File(s)            295 bytes
+
+ Directory of O:\guppy\.git\objects\46
+
+09/06/2025  09:10 PM    <DIR>          .
+09/06/2025  09:10 PM    <DIR>          ..
+09/06/2025  02:49 PM               154 08c1224199560312723ec37db49dc4a3865763
+09/06/2025  09:10 PM               665 51d1a6514262f30bfffec64e093ae8fe23f762
+               2 File(s)            819 bytes
+
+ Directory of O:\guppy\.git\objects\47
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM               380 0db2c3d201e8e99b1ac26e897e0d5d5278ae73
+               1 File(s)            380 bytes
+
+ Directory of O:\guppy\.git\objects\48
+
+09/06/2025  07:28 PM    <DIR>          .
+09/06/2025  07:28 PM    <DIR>          ..
+09/06/2025  07:28 PM               179 f60d107bdf284aa525e82f409c544067cef9e4
+               1 File(s)            179 bytes
+
+ Directory of O:\guppy\.git\objects\49
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM               329 aed28cffd57ef0c70a10a5cc7042478213437f
+               1 File(s)            329 bytes
+
+ Directory of O:\guppy\.git\objects\4b
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM             1,403 961d7af51babee569c81c77ac15dade52f021e
+               1 File(s)          1,403 bytes
+
+ Directory of O:\guppy\.git\objects\51
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM             1,078 781845c6c8f1ab404019a6023321e1cd45880c
+               1 File(s)          1,078 bytes
+
+ Directory of O:\guppy\.git\objects\53
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM             1,199 643e883800e15766888e783c39ec61dc11fd24
+               1 File(s)          1,199 bytes
+
+ Directory of O:\guppy\.git\objects\55
+
+09/06/2025  09:04 PM    <DIR>          .
+09/06/2025  09:04 PM    <DIR>          ..
+09/06/2025  09:04 PM               177 7abab3a3ae6102ad2ebf9497189e72d1ba4491
+               1 File(s)            177 bytes
+
+ Directory of O:\guppy\.git\objects\5c
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM             1,266 b131f97a4a8e0ee2ea356578828fc4f7c27564
+               1 File(s)          1,266 bytes
+
+ Directory of O:\guppy\.git\objects\5d
+
+09/06/2025  09:10 PM    <DIR>          .
+09/06/2025  09:10 PM    <DIR>          ..
+09/06/2025  09:10 PM               595 335401da9959195de2173503b778475668d3df
+09/06/2025  02:26 PM               853 75bfe4e7f199d0c908302a0df47eceaa04ece4
+               2 File(s)          1,448 bytes
+
+ Directory of O:\guppy\.git\objects\62
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM             1,639 d09ef3e0d8713ad4dac7718e046a53670f84fa
+               1 File(s)          1,639 bytes
+
+ Directory of O:\guppy\.git\objects\65
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM               287 a6a5831d1a6a7434d92ed1ac184e5592fab9a6
+               1 File(s)            287 bytes
+
+ Directory of O:\guppy\.git\objects\66
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM             1,083 3cb16581592fb7a0d6e5ad8744c49ab740693d
+               1 File(s)          1,083 bytes
+
+ Directory of O:\guppy\.git\objects\68
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM               386 27777dacb02895d7efdbb1b695f5c5c7e53a50
+09/06/2025  02:26 PM               802 a2d1009cbcf4d70395039186cecd4d137a86d0
+               2 File(s)          1,188 bytes
+
+ Directory of O:\guppy\.git\objects\69
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  02:26 PM                56 336f867452821b179821fb50f60526f0099c82
+09/06/2025  07:18 PM             3,557 e6059dc1f9657693bacacdfb1cfe1d351d9844
+               2 File(s)          3,613 bytes
+
+ Directory of O:\guppy\.git\objects\6a
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM             1,014 b064a035e792f9dc3e97d338ee2776905d1d2d
+               1 File(s)          1,014 bytes
+
+ Directory of O:\guppy\.git\objects\6b
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM               143 f2881266038a883232298553025947268018dd
+               1 File(s)            143 bytes
+
+ Directory of O:\guppy\.git\objects\6c
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM               103 f7720ce54ca498b8784c7dbce9e29f41a58e35
+               1 File(s)            103 bytes
+
+ Directory of O:\guppy\.git\objects\6d
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM             1,285 39e895df0f3719fc936c27546ac384e38fe0bf
+               1 File(s)          1,285 bytes
+
+ Directory of O:\guppy\.git\objects\6e
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM             1,010 aa9cbfffde8f5e664e85d20ae9735578641832
+               1 File(s)          1,010 bytes
+
+ Directory of O:\guppy\.git\objects\6f
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM               412 989e1a6dc7402df87eab05d779a673090262bc
+               1 File(s)            412 bytes
+
+ Directory of O:\guppy\.git\objects\72
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM            41,719 2981de75be044010686927cedc548156120f60
+               1 File(s)         41,719 bytes
+
+ Directory of O:\guppy\.git\objects\73
+
+09/06/2025  09:04 PM    <DIR>          .
+09/06/2025  09:04 PM    <DIR>          ..
+09/06/2025  09:04 PM               154 5d908b66ead982e8b8a787159f6e57c7f1bd4b
+09/06/2025  07:18 PM               334 d3017d678571b81d2bb9f1caeec1769fa80aa1
+               2 File(s)            488 bytes
+
+ Directory of O:\guppy\.git\objects\7a
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:34 PM               236 2f7d59247a610ac86140fe44eeed2882237170
+               1 File(s)            236 bytes
+
+ Directory of O:\guppy\.git\objects\7c
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM               150 7d1b9cafdb5b01a4993f589eda43675d7c5164
+               1 File(s)            150 bytes
+
+ Directory of O:\guppy\.git\objects\80
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM               376 4d2ef46eb87104ec85791f1fd665ddf759e267
+               1 File(s)            376 bytes
+
+ Directory of O:\guppy\.git\objects\83
+
+09/06/2025  09:10 PM    <DIR>          .
+09/06/2025  09:10 PM    <DIR>          ..
+09/06/2025  09:10 PM               179 dc4943f3baf9c680fc0df5a6af9572de55a80c
+               1 File(s)            179 bytes
+
+ Directory of O:\guppy\.git\objects\84
+
+09/06/2025  09:10 PM    <DIR>          .
+09/06/2025  09:10 PM    <DIR>          ..
+09/06/2025  09:10 PM            41,719 c334843cc5adbf43d222adf5bf79f9b6d0530d
+               1 File(s)         41,719 bytes
+
+ Directory of O:\guppy\.git\objects\88
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  02:49 PM               269 8c4fe0730a6e766067838cb486ea70f195c909
+09/06/2025  07:18 PM               664 f504e9a8747f59cf3e57c6df13ff59ec3cf918
+               2 File(s)            933 bytes
+
+ Directory of O:\guppy\.git\objects\89
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM             1,328 ae0fb570f716c66c4c3db738d1ac126adee758
+               1 File(s)          1,328 bytes
+
+ Directory of O:\guppy\.git\objects\8a
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM             2,277 b59944d971733178b5d78ce2856169047f6645
+               1 File(s)          2,277 bytes
+
+ Directory of O:\guppy\.git\objects\8d
+
+09/06/2025  09:14 PM    <DIR>          .
+09/06/2025  09:14 PM    <DIR>          ..
+09/06/2025  09:14 PM               240 69a47bb70918d711274aa2091fe0c5b1912dfb
+               1 File(s)            240 bytes
+
+ Directory of O:\guppy\.git\objects\8e
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM             1,299 bac28ffd6f2a871725e46b37d1610c8de68a9c
+               1 File(s)          1,299 bytes
+
+ Directory of O:\guppy\.git\objects\8f
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM             2,989 1d6b04a04b658fc96235bdcb0e516b355d2e67
+               1 File(s)          2,989 bytes
+
+ Directory of O:\guppy\.git\objects\96
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM                67 218d22430782fccfc4365a2dfc01160244a246
+09/06/2025  02:26 PM             1,075 904f5e0c956088d7ec09ea9bee9bd98fb7080e
+               2 File(s)          1,142 bytes
+
+ Directory of O:\guppy\.git\objects\99
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM             1,112 bc5d545c67860b26cab2d09f409753fad0a9e3
+               1 File(s)          1,112 bytes
+
+ Directory of O:\guppy\.git\objects\9a
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM               314 e16083c5136ad5af4b766323c662da710eefce
+               1 File(s)            314 bytes
+
+ Directory of O:\guppy\.git\objects\9d
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM               836 f638c732111816b08c15b0b6a41a5e377eade7
+               1 File(s)            836 bytes
+
+ Directory of O:\guppy\.git\objects\9f
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM               229 340a2b5a4943c8669ac437bfbc44312306ad5c
+               1 File(s)            229 bytes
+
+ Directory of O:\guppy\.git\objects\a0
+
+09/06/2025  09:24 PM    <DIR>          .
+09/06/2025  09:24 PM    <DIR>          ..
+09/06/2025  09:24 PM               240 6290de8671d9184ea295ddb3323012af78bb31
+               1 File(s)            240 bytes
+
+ Directory of O:\guppy\.git\objects\a1
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM             3,342 d78542002a784365bd85b994dcbc96f58b4829
+               1 File(s)          3,342 bytes
+
+ Directory of O:\guppy\.git\objects\a2
+
+09/06/2025  09:14 PM    <DIR>          .
+09/06/2025  09:14 PM    <DIR>          ..
+09/06/2025  09:14 PM               665 8770824bc97d0c70520a102bc335c1a38dfe60
+               1 File(s)            665 bytes
+
+ Directory of O:\guppy\.git\objects\a5
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM             1,519 231b64e6ec8b951fae4fa6b2b0feacd8604a35
+               1 File(s)          1,519 bytes
+
+ Directory of O:\guppy\.git\objects\ac
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM               175 4516356f4703030c9e7db2d37c380f10bd5be1
+               1 File(s)            175 bytes
+
+ Directory of O:\guppy\.git\objects\ae
+
+09/06/2025  07:26 PM    <DIR>          .
+09/06/2025  07:26 PM    <DIR>          ..
+09/06/2025  07:26 PM               295 1a253d0ceaf89167c4badf6c5a40dbc98532a0
+09/06/2025  02:26 PM               488 eeb270a27e8a7286d635ff95a6868972fefa6e
+               2 File(s)            783 bytes
+
+ Directory of O:\guppy\.git\objects\b1
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM               137 bb8631be524e2f26f990430c5879bf91369a0f
+09/06/2025  02:26 PM               148 f18e5648255b848e683a35436b93a7b66e5e34
+               2 File(s)            285 bytes
+
+ Directory of O:\guppy\.git\objects\b3
+
+09/06/2025  09:14 PM    <DIR>          .
+09/06/2025  09:14 PM    <DIR>          ..
+09/06/2025  09:14 PM               888 9089b401c4908b970afa8702780a2105b0219e
+               1 File(s)            888 bytes
+
+ Directory of O:\guppy\.git\objects\b6
+
+09/06/2025  02:49 PM    <DIR>          .
+09/06/2025  02:49 PM    <DIR>          ..
+09/06/2025  02:49 PM               205 2ec1084e20289710af3943939022c5a4697715
+               1 File(s)            205 bytes
+
+ Directory of O:\guppy\.git\objects\b9
+
+09/06/2025  09:14 PM    <DIR>          .
+09/06/2025  09:14 PM    <DIR>          ..
+09/06/2025  09:14 PM               179 450e27414048ca02b2c245839ce154f4cdd780
+               1 File(s)            179 bytes
+
+ Directory of O:\guppy\.git\objects\bc
+
+09/06/2025  07:26 PM    <DIR>          .
+09/06/2025  07:26 PM    <DIR>          ..
+09/06/2025  07:26 PM               180 90b4361dae207d147ca9c5586f49b3f1cf10bb
+               1 File(s)            180 bytes
+
+ Directory of O:\guppy\.git\objects\be
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM               235 32ba708bda5d37f51b494b141b53720f6e609d
+               1 File(s)            235 bytes
+
+ Directory of O:\guppy\.git\objects\bf
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM             1,760 082a790d15f4d7c654dda40781f72e2684433a
+               1 File(s)          1,760 bytes
+
+ Directory of O:\guppy\.git\objects\c1
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM               129 16ae29e6c6ff179280e7b43187fdf17afc2835
+09/06/2025  02:26 PM               132 e6473a7fa0498c887375f45b06ca336e8c65e2
+               2 File(s)            261 bytes
+
+ Directory of O:\guppy\.git\objects\c2
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM             1,286 08edb6fd6da1402231a928f62aaf26bb41ec2f
+               1 File(s)          1,286 bytes
+
+ Directory of O:\guppy\.git\objects\c3
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM             1,280 a6d4652bd85eefb8b0a317eb2d661dfa9587aa
+               1 File(s)          1,280 bytes
+
+ Directory of O:\guppy\.git\objects\c4
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM               843 c43adb7d1b3162c9949f395f1bd4e17d1b5eab
+               1 File(s)            843 bytes
+
+ Directory of O:\guppy\.git\objects\c6
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM               764 2b4d264bd0b0ae57f5b08898304a4f78b8d4e3
+               1 File(s)            764 bytes
+
+ Directory of O:\guppy\.git\objects\c7
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM               184 7caa0502dcc12e08f59ad0ac265d8054b306c5
+               1 File(s)            184 bytes
+
+ Directory of O:\guppy\.git\objects\c8
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM             1,020 a05d33161744610d282b60a23196bebce79f4c
+               1 File(s)          1,020 bytes
+
+ Directory of O:\guppy\.git\objects\c9
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM               400 eae859870d03e0a78ce1f36b8f84833965135e
+               1 File(s)            400 bytes
+
+ Directory of O:\guppy\.git\objects\ce
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM                53 1e5aac18aefa29943296cbb679fd0c3057233a
+09/06/2025  02:26 PM               827 67e2105e98df1895d2d14274dfc4909e0fb53f
+               2 File(s)            880 bytes
+
+ Directory of O:\guppy\.git\objects\d0
+
+09/06/2025  09:24 PM    <DIR>          .
+09/06/2025  09:24 PM    <DIR>          ..
+09/06/2025  09:24 PM             1,102 e907002e91f186283de280874c1886e0f0e12d
+               1 File(s)          1,102 bytes
+
+ Directory of O:\guppy\.git\objects\d1
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM             3,320 6fee93ca65d00326a350dc2432dfa7da7f3702
+               1 File(s)          3,320 bytes
+
+ Directory of O:\guppy\.git\objects\d3
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM               376 9bb30ad1bb88e65afd7de31fd34e16727c52b5
+               1 File(s)            376 bytes
+
+ Directory of O:\guppy\.git\objects\d7
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM             1,119 2e158977cca67f451b5bd022d69277a74b5116
+               1 File(s)          1,119 bytes
+
+ Directory of O:\guppy\.git\objects\da
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM             1,396 5b7aa7ba9064f8adb2ab30dcd428ede9c61a46
+               1 File(s)          1,396 bytes
+
+ Directory of O:\guppy\.git\objects\dd
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM               450 20b956dc19f8d3dd053d8ee3323119b137263b
+09/06/2025  02:26 PM               518 d77e766512d46806baaa1167a5566f270f1812
+               2 File(s)            968 bytes
+
+ Directory of O:\guppy\.git\objects\df
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM                76 e0770424b2a19faf507a501ebfc23be8f54e7b
+               1 File(s)             76 bytes
+
+ Directory of O:\guppy\.git\objects\e0
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM               153 ec3b833edb6df310c1aec197c6b07cc43c7b4f
+               1 File(s)            153 bytes
+
+ Directory of O:\guppy\.git\objects\e1
+
+09/06/2025  09:10 PM    <DIR>          .
+09/06/2025  09:10 PM    <DIR>          ..
+09/06/2025  09:10 PM             3,630 5336a1ccd34478fd1ea4409fc639126c8b3c25
+               1 File(s)          3,630 bytes
+
+ Directory of O:\guppy\.git\objects\e3
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM               114 15aae3a28c3e2246315ad3afa42577293ca688
+               1 File(s)            114 bytes
+
+ Directory of O:\guppy\.git\objects\e6
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM                15 9de29bb2d1d6434b8b29ae775ad8c2e48c5391
+               1 File(s)             15 bytes
+
+ Directory of O:\guppy\.git\objects\e7
+
+09/06/2025  09:10 PM    <DIR>          .
+09/06/2025  09:10 PM    <DIR>          ..
+09/06/2025  07:18 PM             1,223 58fb99e6d3b79a33e960e7b86c9de51d8cd5dd
+09/06/2025  09:10 PM             1,639 67c59ad1f6c8911a50466375d3d0f3c9ee1a6a
+               2 File(s)          2,862 bytes
+
+ Directory of O:\guppy\.git\objects\ec
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM                36 60fa99144af474fb92471ac78112ed022523e1
+               1 File(s)             36 bytes
+
+ Directory of O:\guppy\.git\objects\ed
+
+09/06/2025  07:28 PM    <DIR>          .
+09/06/2025  07:28 PM    <DIR>          ..
+09/06/2025  07:28 PM               724 1f9f573a5c9e970f9b2d368c4ca8025e0c06c2
+               1 File(s)            724 bytes
+
+ Directory of O:\guppy\.git\objects\ef
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM               778 30be0f516b4626a59f176f48cfe753b19d5830
+               1 File(s)            778 bytes
+
+ Directory of O:\guppy\.git\objects\f0
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM             3,587 c479f6c459741520e99a47da754abf0c0984ad
+               1 File(s)          3,587 bytes
+
+ Directory of O:\guppy\.git\objects\f2
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM               721 7e79b9c1a86df53e4e65ee7c96af1927717e92
+               1 File(s)            721 bytes
+
+ Directory of O:\guppy\.git\objects\f4
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  07:18 PM               217 bf829a5443a107d24e48ea789fc7f452322831
+               1 File(s)            217 bytes
+
+ Directory of O:\guppy\.git\objects\fa
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM               380 2c96d00ef874d874d5241455ea8f5e7cfa195a
+               1 File(s)            380 bytes
+
+ Directory of O:\guppy\.git\objects\fb
+
+09/06/2025  02:49 PM    <DIR>          .
+09/06/2025  02:49 PM    <DIR>          ..
+09/06/2025  02:49 PM             1,130 29d02439f9c44c37c7b999bd42d8eb8fed2fe6
+               1 File(s)          1,130 bytes
+
+ Directory of O:\guppy\.git\objects\fc
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  02:38 PM               180 71e153189496387b6635706a9db027541a0295
+09/06/2025  07:18 PM             1,299 c55de353d2d858b47053698f36f10eba3170f8
+               2 File(s)          1,479 bytes
+
+ Directory of O:\guppy\.git\objects\fd
+
+09/06/2025  07:18 PM    <DIR>          .
+09/06/2025  07:18 PM    <DIR>          ..
+09/06/2025  02:26 PM               200 d32c179543919fe2a969f77cdd5fcd4bd6cd26
+09/06/2025  07:18 PM               295 f05ca9c256ecc703a331569f026f574482a7be
+               2 File(s)            495 bytes
+
+ Directory of O:\guppy\.git\objects\fe
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+09/06/2025  02:26 PM               957 0c74eb7545f86e79cabe101f88c0b31527f9fb
+               1 File(s)            957 bytes
+
+ Directory of O:\guppy\.git\objects\info
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+               0 File(s)              0 bytes
+
+ Directory of O:\guppy\.git\objects\pack
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+               0 File(s)              0 bytes
+
+ Directory of O:\guppy\.git\refs
+
+09/06/2025  02:41 PM    <DIR>          .
+09/06/2025  02:41 PM    <DIR>          ..
+09/06/2025  09:24 PM    <DIR>          heads
+09/06/2025  02:41 PM    <DIR>          remotes
+09/06/2025  02:26 PM    <DIR>          tags
+               0 File(s)              0 bytes
+
+ Directory of O:\guppy\.git\refs\heads
+
+09/06/2025  09:24 PM    <DIR>          .
+09/06/2025  09:24 PM    <DIR>          ..
+09/06/2025  09:24 PM                41 main
+               1 File(s)             41 bytes
+
+ Directory of O:\guppy\.git\refs\remotes
+
+09/06/2025  02:41 PM    <DIR>          .
+09/06/2025  02:41 PM    <DIR>          ..
+09/07/2025  08:02 AM    <DIR>          origin
+               0 File(s)              0 bytes
+
+ Directory of O:\guppy\.git\refs\remotes\origin
+
+09/07/2025  08:02 AM    <DIR>          .
+09/07/2025  08:02 AM    <DIR>          ..
+09/07/2025  08:02 AM                30 HEAD
+09/06/2025  09:25 PM                41 main
+               2 File(s)             71 bytes
+
+ Directory of O:\guppy\.git\refs\tags
+
+09/06/2025  02:26 PM    <DIR>          .
+09/06/2025  02:26 PM    <DIR>          ..
+               0 File(s)              0 bytes
+
+ Directory of O:\guppy\doc
+
+08/16/2025  01:50 PM    <DIR>          .
+08/16/2025  01:50 PM    <DIR>          ..
+08/16/2025  01:50 PM             1,735 trailmix.md
+               1 File(s)          1,735 bytes
+
+ Directory of O:\guppy\include
+
+09/10/2025  08:08 PM    <DIR>          .
+09/10/2025  08:08 PM    <DIR>          ..
+09/10/2025  07:47 PM                78 blkio.h
+09/10/2025  08:01 PM             1,264 cmd.h
+09/08/2025  03:31 PM               185 cwd.h
+09/08/2025  08:20 AM               197 devmap.h
+09/08/2025  01:56 PM               315 devutil.h
+09/06/2025  05:29 PM               410 disk.h
+09/08/2025  08:28 AM               293 diskio.h
+09/10/2025  07:48 PM               247 ext2.h
+09/06/2025  04:01 PM               525 fileutil.h
+09/08/2025  03:07 PM               254 fs_probe.h
+09/08/2025  03:09 PM             2,193 gpt.h
+09/08/2025  11:50 AM             1,075 helper.h
+08/16/2025  02:52 PM               876 mbr.h
+09/08/2025  11:44 AM               542 mnttab.h
+08/16/2025  02:06 PM               530 parse.h
+09/08/2025  08:17 AM               810 registry.h
+09/06/2025  03:21 PM               434 use.h
+09/10/2025  08:08 PM               141 vblk.h
+09/08/2025  01:20 PM                54 version.h
+09/10/2025  07:56 PM               941 vfs.h
+09/10/2025  07:45 PM                86 virtio_blk.h
+              21 File(s)         11,450 bytes
+
+ Directory of O:\guppy\src
+
+09/10/2025  08:08 PM    <DIR>          .
+09/10/2025  08:08 PM    <DIR>          ..
+09/10/2025  07:48 PM               723 blkio.c
+09/10/2025  08:03 PM               543 cmd_cp.c
+09/06/2025  03:01 PM             3,447 cmd_create.c
+09/06/2025  06:12 PM             1,647 cmd_do.c
+09/06/2025  06:07 PM               194 cmd_exit.c
+08/16/2025  02:09 PM               151 cmd_format.c
+09/08/2025  01:50 PM            10,261 cmd_gpt.c
+09/06/2025  05:22 PM               223 cmd_help.c
+09/08/2025  03:42 PM             3,135 cmd_ls.c
+08/16/2025  02:10 PM               145 cmd_mbr.c
+09/10/2025  08:03 PM               936 cmd_mkdir.c
+09/08/2025  01:59 PM             5,184 cmd_mkfs_ext2.c
+09/10/2025  08:07 PM             7,298 cmd_mount.c
+08/16/2025  02:10 PM               147 cmd_part.c
+09/06/2025  09:10 PM            10,451 cmd_parted.c
+09/08/2025  03:32 PM               580 cmd_pwd.c
+09/08/2025  03:34 PM             3,738 cmd_registry.c
+09/08/2025  11:42 AM               580 cmd_use.c
+09/08/2025  03:31 PM               776 cwd.c
+09/08/2025  08:20 AM             1,042 dev_map.c
+09/08/2025  03:08 PM               780 dev_util.c
+09/08/2025  08:28 AM               852 diskio.c
+09/10/2025  07:55 PM             8,731 ext2.c
+09/06/2025  09:13 PM             2,732 fileutil.c
+09/08/2025  03:07 PM               519 fs_probe.c
+09/08/2025  03:10 PM            13,677 gpt.c
+09/08/2025  08:32 AM               965 gpt_get_partition.c
+09/06/2025  06:09 PM             3,329 guppy.c
+09/08/2025  11:50 AM             3,408 helper.c
+09/06/2025  04:03 PM             3,303 mbr.c
+09/08/2025  11:45 AM             1,233 mnttab.c
+09/06/2025  02:46 PM             3,337 parse.c
+09/06/2025  06:16 PM             1,874 repl.c
+09/10/2025  08:08 PM               733 vblk.c
+09/10/2025  07:57 PM             3,540 vfs.c
+09/10/2025  07:46 PM             1,280 virtio_blk.c
+              36 File(s)        101,494 bytes
+
+ Directory of O:\guppy\tests
+
+09/08/2025  01:28 PM    <DIR>          .
+09/08/2025  01:28 PM    <DIR>          ..
+08/16/2025  01:19 PM               346 floppy.script
+09/08/2025  03:43 PM        20,971,520 image.img
+09/10/2025  07:45 PM               384 linux.script
+09/06/2025  04:45 PM                21 Makefile
+               4 File(s)     20,972,271 bytes
+
+     Total Files Listed:
+             234 File(s)     21,455,162 bytes
+             407 Dir(s)   1,795,837,952 bytes free

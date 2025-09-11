@@ -48,3 +48,9 @@ int gpt_add_partition_lba(const char *path,
                           const char *name_utf8,
                           uint64_t first_lba,
                           uint64_t last_lba);
+
+// return true if partition found; fills start_lba and total_sectors
+bool gpt_get_partition(const char *image_path, int part_index,
+                       uint64_t *start_lba, uint64_t *total_sectors);
+					   
+int gpt_find_single_partition(const char *image_path);

@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <errno.h>
 
-#include "cmd.h"      // run_command_line, GUPPY_RC_EXIT, guppy_exit_requested()
+#include "cmds.h"      // run_command_line, GUPPY_RC_EXIT, guppy_exit_requested()
 #include "helper.h"   // rstrip, is_blank_or_comment
 
 int cmd_do(int argc, char **argv) {

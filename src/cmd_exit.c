@@ -1,5 +1,6 @@
 // src/cmd_exit.c
-#include "cmd.h"
+
+#include "cmds.h"
 
 int cmd_exit(int argc, char **argv) {
     (void)argc; (void)argv;

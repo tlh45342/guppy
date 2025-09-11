@@ -25,3 +25,7 @@ void rstrip(char *s);
 void lstrip(char *s);
 void trim(char *s);
 
+// Returns an image path for either a literal file path or a /dev/* alias.
+// If arg starts with "/dev/", it resolves via devmap; otherwise returns arg as-is.
+// May return NULL if /dev/* is unknown.
+const char* resolve_image_or_dev(const char *arg);

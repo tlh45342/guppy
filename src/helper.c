@@ -1,10 +1,14 @@
+// src/helper.c
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
 #include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
+
 #include "helper.h"
+#include "devmap.h"
 
 // Case-insensitive compare for n characters of suffix/prefix tokens
 int strncaseeq(const char* a, const char* b, size_t n) {
@@ -104,4 +108,14 @@ uint64_t parse_size(const char* s, int* ok) {
 
 double bytes_to_mib(uint64_t b) {
     return (double)b / (1024.0 * 1024.0);
+}
+
+const char* resolve_image_or_dev(const char *arg) {
+    if (!arg || !*arg) return NULL;
+    if (strncmp(arg, "/dev/", 5) == 0) {
+        // Look up mapped image for this device alias
+        return devmap_resolve(arg);  // may be NULL if not mapped
+    }
+    // Treat as a literal path; let callers handle file existence
+    return arg;
 }

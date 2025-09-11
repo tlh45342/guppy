@@ -9,6 +9,8 @@ typedef struct {
     const char *help;                     // short help line
 } Command;
 
+struct vblk;
+
 const Command *find_command(const char *name);
 int run_command_line(const char *line);
 void print_all_commands(void);
@@ -31,3 +33,10 @@ int cmd_part(int argc, char **argv);
 int cmd_parted(int argc, char **argv);
 int cmd_gpt(int argc, char **argv);
 int cmd_use(int argc, char **argv);
+int cmd_pwd(int argc, char **argv);
+int cmd_ls(int argc, char **argv);
+int cmd_mkdir(int argc, char **argv);
+int cmd_cp(int argc, char **argv);
+int cmd_mount(int argc, char **argv);
+int cmd_mkfs_ext2(int argc, char **argv);
+int cmd_cd(int argc, char **argv);
