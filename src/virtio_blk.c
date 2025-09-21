@@ -1,7 +1,5 @@
 // src/virtio_blk.c
 
-// src/virtio_blk.c
-
 #include "virtio_blk.h"
 #include "blkio.h"     // blk_read_bytes / blk_write_bytes
 #include <stdbool.h>

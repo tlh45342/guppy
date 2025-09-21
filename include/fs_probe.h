@@ -2,6 +2,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "vblk.h"
+
 // Check for ext2/3/4 magic (0xEF53) at superblock offset.
 // fs_offset_bytes = byte offset where the filesystem starts.
 bool probe_ext2_magic(const char *image_path, uint64_t fs_offset_bytes);
+
+bool fs_probe(vblk_t *blk, char *out_fstype, size_t outsz);

@@ -1,0 +1,5 @@
+# test6.script
+use -i image2.img /dev/a
+mount /dev/a1 /
+ls
+cat hello.txt

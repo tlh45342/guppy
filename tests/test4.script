@@ -1,0 +1,3 @@
+# tests/test4.script
+use -i image2.img /dev/a
+partscan /dev/a

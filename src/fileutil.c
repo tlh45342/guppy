@@ -22,29 +22,6 @@ int fseek64(FILE *f, uint64_t off) {
 #endif
 }
 
-/* Ensure that the file is at least `size` bytes long.
-   Creates or extends with zeros if needed. */
-int file_ensure_size(const char *path, uint64_t size) {
-    FILE *f = fopen(path, "r+b");
-    if (!f) f = fopen(path, "w+b");
-    if (!f) return -1;
-
-    if (fseek64(f, size - 1) != 0) {
-        fclose(f);
-        return -1;
-    }
-
-    unsigned char zero = 0;
-    if (fwrite(&zero, 1, 1, f) != 1) {
-        fclose(f);
-        return -1;
-    }
-
-    fflush(f);
-    fclose(f);
-    return 0;
-}
-
 /* read exactly n bytes at absolute file offset 'off' */
 int file_read_at(FILE *f, uint64_t off, void *buf, size_t n) {
     if (!f || !buf || n == 0) return -1;
@@ -81,25 +58,46 @@ int file_write_at(FILE *f, uint64_t off, const void *buf, size_t n) {
     return 0;
 }
 
-int file_read_at_path(const char *path, uint64_t off, void *buf, size_t n) {
-    if (!path || !buf) return -1;
-    FILE *f = fopen(path, "rb");
-    if (!f) return -1;
-    int rc = file_read_at(f, off, buf, n);
-    fclose(f);
-    return rc;
+static int seek64(FILE *f, uint64_t off) {
+    return fseeko(f, (off_t)off, SEEK_SET);
 }
 
+int file_read_at_path(const char *path, uint64_t off, void *buf, size_t n) {
+    FILE *fp = fopen(path, "rb");
+    if (!fp) return -1;
+    if (seek64(fp, off) != 0) { fclose(fp); return -1; }
+    size_t got = fread(buf, 1, n, fp);
+    fclose(fp);
+    return (got == n) ? 0 : -1;
+}
+
+/* THIS WAS THE CONFLICT — it should be WRITE, not another READ */
 int file_write_at_path(const char *path, uint64_t off, const void *buf, size_t n) {
-    if (!path || !buf) return -1;
-    FILE *f = fopen(path, "r+b");
-    if (!f) f = fopen(path, "w+b");
-    if (!f) return -1;
-    int rc = file_write_at(f, off, buf, n);
-    fflush(f);
-#if defined(_WIN32) && !defined(__CYGWIN__)
-    _commit(_fileno(f)); /* best-effort */
-#endif
-    fclose(f);
-    return rc;
+    FILE *fp = fopen(path, "r+b");
+    if (!fp) {
+        // try create
+        fp = fopen(path, "w+b");
+        if (!fp) return -1;
+    }
+    if (seek64(fp, off) != 0) { fclose(fp); return -1; }
+    size_t put = fwrite(buf, 1, n, fp);
+    fflush(fp);
+    fclose(fp);
+    return (put == n) ? 0 : -1;
+}
+
+int file_ensure_size(const char *path, uint64_t size_bytes) {
+    FILE *fp = fopen(path, "r+b");
+    if (!fp) {
+        fp = fopen(path, "w+b");
+        if (!fp) return -1;
+    }
+    if (seek64(fp, size_bytes ? size_bytes - 1 : 0) != 0) { fclose(fp); return -1; }
+    if (size_bytes) {
+        unsigned char zero = 0;
+        if (fwrite(&zero, 1, 1, fp) != 1) { fclose(fp); return -1; }
+    }
+    fflush(fp);
+    fclose(fp);
+    return 0;
 }

@@ -82,3 +82,10 @@ bool ext2_create_and_write(const char *path, const uint8_t *data, uint32_t len);
 bool ext2_read_super(ext2_superblock *out);
 bool ext2_read_inode(uint32_t ino, ext2_inode *out);
 */
+
+/* ---- directory creation (planned full implementation) ---- */
+/* Create a single directory (no parents). Returns true on success. */
+bool ext2_mkdir(const char *path);
+
+/* Create all parents as needed (like `mkdir -p`). Returns true on success. */
+bool ext2_mkdir_p(const char *path);

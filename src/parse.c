@@ -4,6 +4,34 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* ---------------- comment helpers ---------------- */
+
+// returns 1 if the line is blank or a full-line '#' comment
+static int is_blank_or_hash_comment(const char *line){
+    const char *s = line;
+    while (*s == ' ' || *s == '\t') s++;   // skip leading whitespace
+    return (*s == '\0' || *s == '#');
+}
+
+// remove inline '#' comments, honoring quotes and backslash escapes
+static void strip_inline_hash_comment(char *line){
+    int in_single = 0, in_double = 0, esc = 0;
+    for (char *p = line; *p; ++p) {
+        if (esc) { esc = 0; continue; }
+        if (*p == '\\') { esc = 1; continue; }
+        if (!in_double && *p == '\'') { in_single = !in_single; continue; }
+        if (!in_single && !in_double && *p == '\"') { in_double = !in_double; continue; }
+        if (!in_single && !in_double && *p == '#') { *p = '\0'; break; }
+    }
+}
+
+// preprocess: skip blank/# lines, strip inline '# ...'
+static int preprocess_script_line(char *line){
+    if (is_blank_or_hash_comment(line)) return 0;
+    strip_inline_hash_comment(line);
+    return 1;
+}
+
 /* case-insensitive string equality */
 static int eqi(const char *a, const char *b) {
     while (*a && *b) {
@@ -64,7 +92,7 @@ long long parse_size_bytes(const char *text) {
 long long parse_size_arg(const char *arg) {
     if (!arg) return -1;
     const char *eq = strchr(arg, '=');
-    if (starts_with(arg, "--size")) {
+    if (starts_with(arg, "--size")) {   // implemented in helper.c
         if (eq && *(eq+1)) return parse_size_bytes(eq+1);
         return -1; // caller may handle "--size" followed by next token
     }
@@ -75,9 +103,12 @@ long long parse_size_arg(const char *arg) {
    argv parsing
    -------------------------------------------------------------------------- */
 int parse_argv(char *line, int maxv, char **argv) {
-    // strip trailing CR/LF
+    // strip trailing CR/LF first
     size_t n = strlen(line);
     while (n && (line[n-1]=='\n' || line[n-1]=='\r')) line[--n] = '\0';
+
+    // handle comments (only '#') and inline '# ...'
+    if (!preprocess_script_line(line)) return 0;
 
     int argc = 0;
     char *p = line;

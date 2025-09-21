@@ -49,15 +49,43 @@ static int handle_do(int argc, char **argv) {
 }
 
 // ---------- REPL ----------
+#ifndef GUPPY_RC_EXIT
+#define GUPPY_RC_EXIT 255  // unique sentinel; only 'exit' should return this
+#endif
+
 static int repl_loop(void) {
     guppy_clear_exit_request();               // reset when REPL starts
+    setvbuf(stdout, NULL, _IONBF, 0);         // unbuffered prompts on Windows/Cygwin
+    setvbuf(stderr, NULL, _IONBF, 0);
+
     char line[1024];
     printf("Guppy %s — REPL. Type 'help' or 'exit'.\n", GUPPY_VERSION);
+
     for (;;) {
         printf("guppy> ");
-        if (!fgets(line, sizeof line, stdin)) break;
-        int rc = run_command_line(line);
-        if (rc == GUPPY_RC_EXIT || guppy_exit_requested()) break;
+        fflush(stdout);
+
+        if (!fgets(line, sizeof line, stdin)) {
+            // EOF or error: don't silently exit—just continue or break cleanly
+            if (feof(stdin)) {
+                fprintf(stderr, "[repl] EOF on stdin; use 'exit' to quit next time.\n");
+                break;
+            }
+            if (ferror(stdin)) {
+                clearerr(stdin);
+                fprintf(stderr, "[repl] stdin error cleared; continuing.\n");
+                continue;
+            }
+        }
+
+        // Run the command. We IGNORE rc unless 'exit' set the flag below.
+        (void)run_command_line(line);
+
+        if (guppy_exit_requested()) {
+            fprintf(stderr, "[repl] exit requested.\n");
+            break;
+        }
+        // Keep looping no matter what other rc values were returned.
     }
     return 0;
 }

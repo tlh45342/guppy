@@ -1,3 +1,3 @@
 // include/version.h
 
-#define GUPPY_VERSION "0.0.12"
+#define GUPPY_VERSION "0.0.24"

@@ -1,0 +1,12 @@
+# tests/test3.script
+debug all on
+create image2.img --size 10MiB
+use -i image2.img /dev/a
+use
+gpt init /dev/a
+gpt add /dev/a --type linuxfs --name "rootfs" --start 1MiB --size 100%
+gpt print /dev/a
+partscan /dev/a
+mkfs.ext2 /dev/a1
+mount /dev/a1 /
+echo "The lazy fox jumped over the log" > hello.txt
