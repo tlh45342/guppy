@@ -59,8 +59,17 @@ static int repl_loop(void) {
     setvbuf(stderr, NULL, _IONBF, 0);
 
     char line[1024];
-    printf("Guppy %s — REPL. Type 'help' or 'exit'.\n", GUPPY_VERSION);
-
+	
+	#ifdef DEBUG
+		printf("DEBUG macro is defined (debug mode ON)\n");
+	#else
+		printf("DEBUG macro is not defined (debug mode OFF)\n");
+	#endif
+	
+	#ifdef DEBUG
+		printf("Guppy %s — REPL. Type 'help' or 'exit'.\n", GUPPY_VERSION);
+	#endif
+			
     for (;;) {
         printf("guppy> ");
         fflush(stdout);
@@ -82,7 +91,9 @@ static int repl_loop(void) {
         (void)run_command_line(line);
 
         if (guppy_exit_requested()) {
-            fprintf(stderr, "[repl] exit requested.\n");
+			#ifdef DEBUG
+				fprintf(stderr, "[repl] exit requested.\n");
+			#endif
             break;
         }
         // Keep looping no matter what other rc values were returned.

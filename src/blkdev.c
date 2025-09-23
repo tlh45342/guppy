@@ -4,6 +4,8 @@
 #include <string.h>
 #include <inttypes.h>
 #include <sys/types.h>
+
+#include "debug.h"
 #include "genhd.h"
 #include "vblk.h"
 #include "diskio.h"
@@ -11,11 +13,6 @@
 #define LSEC 512u
 #define MAX_PARTS 128
 #define ENTRIES_MAX_BYTES (8u*1024u*1024u) /* 8 MiB cap */
-
-/* Verbose scan breadcrumbs (stderr) */
-#ifndef DBG
-#define DBG(fmt, ...) fprintf(stderr, "[scan] " fmt "\n", ##__VA_ARGS__)
-#endif
 
 /* ---------- Forward prototypes (avoid implicit-decl ABI bugs) ---------- */
 static inline int read_lba512(vblk_t *dev, uint64_t lba, void *buf, uint32_t cnt);
@@ -345,7 +342,7 @@ int disk_scan_partitions(struct gendisk *gd) {
         return 0;
     }
 
-    printf("partscan: no partitions registered on %s\n", gd->name);
+    DBG("partscan: no partitions registered on %s", gd->name);
     DBG("disk_scan_partitions: returning 0 (no PT)");
     return 0;
 }

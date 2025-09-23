@@ -2,6 +2,7 @@
 #include <string.h>
 #include <ctype.h>
 
+#include "debug.h"
 #include "cmds.h"      // Command proto typedefs
 #include "debug.h"     // g_debug_flags + bits
 

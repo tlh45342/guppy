@@ -22,6 +22,8 @@ INSTALL_BIN  ?= $(INSTALL) -m 0755
 MKDIR_P      ?= mkdir -p
 STRIP        ?= strip
 
+CPPFLAGS += -DDEBUG
+
 # ---- detect OS & set platform flags -----------------------------------------
 UNAME_S := $(shell uname -s 2>/dev/null || echo Unknown)
 EXE :=

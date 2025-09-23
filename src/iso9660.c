@@ -1,4 +1,4 @@
-// src/iso9660.c — Core ISO9660 + Joliet reader (no helpers here)
+// src/iso9660.c — Core ISO9660 (+ Joliet) reader, VFS-agnostic (no registration)
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -8,7 +8,7 @@
 
 #include "iso9660.h"  // public API
 #include "vblk.h"     // vblk_t, vblk_read_blocks
-#include "dbg.h"      // ISO_DBG(...), g_debug_iso (if you use it)
+#include "debug.h"    // DBG(...)
 
 /* ============================ Config & Debug Helpers ============================ */
 
@@ -19,18 +19,6 @@
 #ifndef ISO_TRACE_LIMIT
 #define ISO_TRACE_LIMIT (1u<<20)  /* 1 MiB safety */
 #endif
-
-#ifndef ISO_DBGF
-#define ISO_DBGF(flag, fmt, ...) \
-    do { extern uint32_t g_debug_iso; if (g_debug_iso & (flag)) ISO_DBG(fmt, ##__VA_ARGS__); } while(0)
-#endif
-
-#define ISO_FAIL(fmt, ...) \
-    do { ISO_DBG("ISO-FAIL @%s:%d: " fmt, __FILE__, __LINE__, ##__VA_ARGS__); return false; } while(0)
-#define ISO_REQUIRE(cond, fmt, ...) \
-    do { if (!(cond)) ISO_FAIL(fmt, ##__VA_ARGS__); } while(0)
-#define ISO_GUARD(cond, action, fmt, ...) \
-    do { if (!(cond)) { ISO_DBG("ISO-GUARD @%s:%d: " fmt, __FILE__, __LINE__, ##__VA_ARGS__); action; } } while(0)
 
 /* ============================ Small Helpers ============================ */
 
@@ -149,10 +137,25 @@ static int name_matches(const char *decoded, const char *want, int use_joliet) {
     }
 }
 
+/* ============================ ISO-sector Read Helpers ============================ */
+
+/* Read one ISO sector (iso->block_size bytes) at ISO-LBA 'lba' into dst. */
+static bool iso_read_sector(const iso9660_t *iso, uint32_t lba, void *dst) {
+    uint32_t bs = iso->block_size ? iso->block_size : 2048u;
+    uint32_t count512 = bs / 512u;
+    if (count512 == 0 || (bs % 512u) != 0) return false;
+    /* Map 1 ISO-LBA to N 512-byte blocks */
+    return vblk_read_blocks(iso->dev, lba * count512, count512, dst);
+}
+
 /* ============================ Block I/O Wrapper ============================ */
 
 static bool read_blocks(iso9660_t *iso, uint32_t lba, uint32_t count, void *dst) {
-    return vblk_read_blocks(iso->dev, lba, count, dst);
+    /* Read 'count' ISO sectors (each iso->block_size bytes) */
+    for (uint32_t i = 0; i < count; ++i) {
+        if (!iso_read_sector(iso, lba + i, (uint8_t*)dst + (i * iso->block_size))) return false;
+    }
+    return true;
 }
 
 /* ============================ Public API ============================ */
@@ -162,8 +165,13 @@ bool iso_mount(vblk_t *dev, iso9660_t *out) {
 
     uint8_t sec[2048];
 
-    // PVD @ LBA 16
-    if (!vblk_read_blocks(dev, 16, 1, sec)) return false;
+    /* Bootstrap read of PVD @ ISO-LBA 16 using assumed 2048 bytes,
+       because we don't know block_size yet. */
+    {
+        iso9660_t tmp = { .dev = dev, .block_size = 2048, .use_joliet = 0 };
+        if (!iso_read_sector(&tmp, 16, sec)) return false;
+    }
+
     if (!(sec[0] == 1 && memcmp(sec + 1, "CD001", 5) == 0 && sec[6] == 1)) return false;
 
     const uint16_t bs = rd_le16(sec + 128); // logical block size (LE)
@@ -175,24 +183,24 @@ bool iso_mount(vblk_t *dev, iso9660_t *out) {
 
     // PVD root record at byte 156
     const uint8_t *root = sec + 156;
-    out->pvd_lba  = 16;
+    out->pvd_lba   = 16;
     out->root_lba  = rd_le32(root + 2);
     out->root_size = rd_le32(root + 10);
 
     // Probe SVDs (17..19) for Joliet
     for (int l = 17; l <= 19; ++l) {
-        if (!vblk_read_blocks(dev, (uint32_t)l, 1, sec)) break;
+        if (!iso_read_sector(out, (uint32_t)l, sec)) break;
         if (is_joliet_svd(sec)) {
             const uint8_t *svd_root = sec + 156;
-            out->root_lba  = rd_le32(svd_root + 2);
-            out->root_size = rd_le32(svd_root + 10);
+            out->root_lba   = rd_le32(svd_root + 2);
+            out->root_size  = rd_le32(svd_root + 10);
             out->use_joliet = 1;
             break;
         }
     }
 
-    ISO_DBG("mount: %s, root=[lba=%u size=%u] bs=%u",
-            out->use_joliet ? "Joliet" : "Primary", out->root_lba, out->root_size, out->block_size);
+    DBG("mount: %s, root=[lba=%u size=%u] bs=%u",
+        out->use_joliet ? "Joliet" : "Primary", out->root_lba, out->root_size, out->block_size);
     return true;
 }
 
