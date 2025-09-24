@@ -6,6 +6,8 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "debug.h"
+#include "vfs.h"
 #include "helper.h"
 #include "fileutil.h"
 #include "mbr.h"
@@ -13,6 +15,15 @@
 #include "version.h"
 
 // ---------- small helpers ----------
+
+
+static int _dumpfs(const filesystem_type_t *fs, void *u)
+{
+    (void)u;
+    const char *name = (fs && fs->name) ? fs->name : "(null)";
+    DBG("vfs: fs='%s'", name);
+    return 0;
+}
 
 // ---- 'do' command implementation (script runner) ----
 static int handle_do(int argc, char **argv) {
@@ -103,6 +114,15 @@ static int repl_loop(void) {
 
 // ---------- CLI entry ----------
 int main(int argc, char **argv) {
+
+    /* Initialize VFS early: */
+    (void)vfs_init();
+
+	#ifdef DEBUG
+    /* enumerate registered filesystems (debug visibility) */
+    (void)vfs_for_each_fs(_dumpfs, NULL);
+	#endif
+
     // No arguments → REPL
     if (argc <= 1) return repl_loop();
 

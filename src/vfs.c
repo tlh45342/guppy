@@ -5,8 +5,20 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+#include "debug.h"
 #include "vfs.h"
 #include "vfs_stat.h"
+
+
+#include <stdio.h>
+#include <string.h>
+#if defined(_MSC_VER)
+#  define strcasecmp _stricmp
+#else
+#  include <strings.h>   // for strcasecmp on POSIX/Cygwin
+#endif
+
+
 
 /* ---------- Feature toggles ---------- */
 #ifndef VFS_HAVE_CREATE_OP
@@ -26,7 +38,6 @@
 #endif
 
 /* ---------- Filesystem registry ---------- */
-
 typedef struct { const char *name; const filesystem_type_t *fs; } fs_entry_t;
 static fs_entry_t g_fs[VFS_MAX_FS_TYPES];
 static int g_fs_n = 0;
@@ -34,7 +45,14 @@ static int g_fs_n = 0;
 int vfs_register(const filesystem_type_t *fst) {
     if (!fst || !fst->name) return -1;
     if (g_fs_n >= VFS_MAX_FS_TYPES) return -1;
+    /* dedupe by name (case-insensitive) */
+    for (int i = 0; i < g_fs_n; ++i) {
+        if (strcasecmp(g_fs[i].name, fst->name) == 0) return 0;
+    }
     g_fs[g_fs_n++] = (fs_entry_t){ fst->name, fst };
+#ifdef DEBUG
+    DBG("vfs: registered '%s'", fst->name);
+#endif
     return 0;
 }
 
@@ -51,28 +69,31 @@ int vfs_register_alias(const char *alias, const filesystem_type_t *target) {
     if (!alias || !target) return -1;
     if (g_fs_n >= VFS_MAX_FS_TYPES) return -1;
     g_fs[g_fs_n++] = (fs_entry_t){ alias, target };
+#ifdef DEBUG
+    DBG("vfs: alias '%s' -> '%s'", alias, target->name ? target->name : "?");
+#endif
     return 0;
+}
+
+static int ci_cmp(char a, char b) {
+    if (a >= 'A' && a <= 'Z') a += 32;
+    if (b >= 'A' && b <= 'Z') b += 32;
+    return (int)(unsigned char)a - (int)(unsigned char)b;
 }
 
 const filesystem_type_t* vfs_find_fs(const char *name) {
     if (!name) return NULL;
     for (int i = 0; i < g_fs_n; ++i) {
         const char *a = g_fs[i].name, *b = name;
-        while (*a && *b) {
-            char ca = (*a >= 'A' && *a <= 'Z') ? (*a + 32) : *a;
-            char cb = (*b >= 'A' && *b <= 'Z') ? (*b + 32) : *b;
-            if (ca != cb) break;
-            ++a; ++b;
-        }
+        while (*a && *b && ci_cmp(*a, *b) == 0) { ++a; ++b; }
         if (*a == '\0' && *b == '\0') return g_fs[i].fs;
     }
     return NULL;
 }
 
 /* ---------- Mount table (single source of truth) ---------- */
-
 typedef struct mount_rec {
-    char          mp[VFS_PATH_MAX]; /* normalized mountpoint, no trailing slash (except "/") */
+    char          mp[VFS_PATH_MAX]; /* normalized mountpoint */
     superblock_t *sb;
     /* user-visible metadata */
     char          src[64];          /* "/dev/a1" */
@@ -98,7 +119,7 @@ static void vfs_normalize_path(const char *in, char *out, size_t cap) {
     while (n > 1 && out[n-1] == '/') { out[n-1] = '\0'; --n; }
 }
 
-/* Longest-prefix match mount for given normalized path; returns index or -1 */
+/* Longest-prefix match mount */
 static int vfs_find_mount_for(const char *path_norm) {
     int best = -1; size_t best_len = 0;
     for (int i = 0; i < g_mnt_n; ++i) {
@@ -125,7 +146,6 @@ static void vfs_mount_relative(const char *path_norm, const mount_rec_t *m, char
 }
 
 /* ---------- Path walk ---------- */
-
 typedef struct path_res {
     inode_t *dir;
     inode_t *node;
@@ -197,7 +217,6 @@ static int vfs_resolve_path(const char *path, path_res_t *out) {
 }
 
 /* ---------- Router: mount / umount / list ---------- */
-
 int vfs_mount_dev(const char *fstype,
                   const char *src,
                   vblk_t *dev,
@@ -263,7 +282,7 @@ void vfs_list_mounts(void) {
     }
 }
 
-/* Compatibility helpers for older callers (operate on unified table) */
+/* Compatibility helpers for UI */
 int  vfs_register_mount(const char *src, const char *fstype,
                         const char *target, const char *opts)
 {
@@ -312,7 +331,6 @@ const vfs_mount_t *vfs_mount_get(int index)
 }
 
 /* ---------- File-level ops ---------- */
-
 int vfs_open(const char *path, int flags, uint32_t mode, struct file **out) {
     if (!out) return -1;
     *out = NULL;
@@ -378,7 +396,7 @@ int vfs_mkdir(const char *path, unsigned mode) {
 #endif
 }
 
-/* Metadata */
+/* ---------- Metadata ---------- */
 int vfs_stat(const char *path, struct g_stat *st) {
     if (!st) return -1;
     path_res_t r;
@@ -393,4 +411,20 @@ int vfs_statfs(const char *path, struct g_statvfs *svfs) {
     if (vfs_resolve_path(path, &r) != 0) return -1;
     if (!r.mnt || !r.mnt->sb || !r.mnt->sb->s_op || !r.mnt->sb->s_op->statfs) return -1;
     return r.mnt->sb->s_op->statfs(r.mnt->sb, svfs);
+}
+
+/* ---- Built-in FS declarations (provided by each module) ---- */
+extern const filesystem_type_t VFS_EXT2;
+extern const filesystem_type_t VFS_FAT;
+extern const filesystem_type_t VFS_VFAT;
+extern const filesystem_type_t VFS_NTFS;
+extern const filesystem_type_t VFS_ISO9660;
+
+int vfs_init(void) {
+    (void)vfs_register(&VFS_EXT2);
+    (void)vfs_register(&VFS_FAT);
+    (void)vfs_register(&VFS_VFAT);
+    (void)vfs_register(&VFS_NTFS);
+    (void)vfs_register(&VFS_ISO9660);
+    return 0;
 }

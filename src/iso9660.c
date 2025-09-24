@@ -160,38 +160,55 @@ static bool read_blocks(iso9660_t *iso, uint32_t lba, uint32_t count, void *dst)
 
 /* ============================ Public API ============================ */
 
-bool iso_mount(vblk_t *dev, iso9660_t *out) {
+bool iso_mount(vblk_t *dev, iso9660_t *out)
+{
     if (!dev || !out) return false;
 
-    uint8_t sec[2048];
+    /* PVD/SVD constants (ISO9660) */
+    enum {
+        PVD_LBA              = 16u,   /* Primary Volume Descriptor */
+        SVD_FIRST_LBA        = 17u,   /* Supplementary (Joliet) */
+        SVD_LAST_LBA         = 19u,
+        VD_TYPE_OFF          = 0,     /* 1 = PVD, 2 = SVD */
+        VD_ID_OFF            = 1,     /* "CD001" */
+        VD_VER_OFF           = 6,     /* 1 */
+        PVD_LOGICAL_BS_OFF   = 128,   /* uint16 LE */
+        PVD_ROOT_DIRREC_OFF  = 156    /* directory record */
+    };
 
-    /* Bootstrap read of PVD @ ISO-LBA 16 using assumed 2048 bytes,
-       because we don't know block_size yet. */
+    /* Read the PVD with an assumed 2048-byte sector size */
+    uint8_t sec[2048];
     {
         iso9660_t tmp = { .dev = dev, .block_size = 2048, .use_joliet = 0 };
-        if (!iso_read_sector(&tmp, 16, sec)) return false;
+        if (!iso_read_sector(&tmp, PVD_LBA, sec)) return false;
     }
 
-    if (!(sec[0] == 1 && memcmp(sec + 1, "CD001", 5) == 0 && sec[6] == 1)) return false;
+    /* Validate PVD header: type=1, id="CD001", version=1 */
+    if (!(sec[VD_TYPE_OFF] == 1 &&
+          memcmp(sec + VD_ID_OFF, "CD001", 5) == 0 &&
+          sec[VD_VER_OFF] == 1))
+        return false;
 
-    const uint16_t bs = rd_le16(sec + 128); // logical block size (LE)
-    out->dev         = dev;
-    out->block_size  = bs ? bs : 2048;
-    out->use_joliet  = 0;
+    /* Adopt logical block size from the PVD */
+    const uint16_t bs = rd_le16(sec + PVD_LOGICAL_BS_OFF);
+    out->dev        = dev;
+    out->block_size = bs ? bs : 2048;
+    out->use_joliet = 0;
+    if (out->block_size > ISO_MAX_BS || (out->block_size % 512u) != 0)
+        return false;
 
-    if (out->block_size > ISO_MAX_BS) return false;
+    /* Seed root from the PVD root directory record */
+    const uint8_t *pvd_root = sec + PVD_ROOT_DIRREC_OFF;
+    out->pvd_lba   = PVD_LBA;
+    out->root_lba  = rd_le32(pvd_root + 2);
+    out->root_size = rd_le32(pvd_root + 10);
 
-    // PVD root record at byte 156
-    const uint8_t *root = sec + 156;
-    out->pvd_lba   = 16;
-    out->root_lba  = rd_le32(root + 2);
-    out->root_size = rd_le32(root + 10);
-
-    // Probe SVDs (17..19) for Joliet
-    for (int l = 17; l <= 19; ++l) {
-        if (!iso_read_sector(out, (uint32_t)l, sec)) break;
+    /* Probe SVDs (17..19) for Joliet and prefer if present */
+    iso9660_t probe = *out; /* has correct block_size now */
+    for (uint32_t lba = SVD_FIRST_LBA; lba <= SVD_LAST_LBA; ++lba) {
+        if (!iso_read_sector(&probe, lba, sec)) break;
         if (is_joliet_svd(sec)) {
-            const uint8_t *svd_root = sec + 156;
+            const uint8_t *svd_root = sec + PVD_ROOT_DIRREC_OFF;
             out->root_lba   = rd_le32(svd_root + 2);
             out->root_size  = rd_le32(svd_root + 10);
             out->use_joliet = 1;
@@ -200,7 +217,9 @@ bool iso_mount(vblk_t *dev, iso9660_t *out) {
     }
 
     DBG("mount: %s, root=[lba=%u size=%u] bs=%u",
-        out->use_joliet ? "Joliet" : "Primary", out->root_lba, out->root_size, out->block_size);
+        out->use_joliet ? "Joliet" : "Primary",
+        out->root_lba, out->root_size, out->block_size);
+
     return true;
 }
 

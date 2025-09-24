@@ -48,3 +48,6 @@ int cmd_mkfs_vfat(int argc, char **argv);
 int cmd_mkfs_ntfs(int argc, char **argv);
 int cmd_partscan(int argc, char **argv);
 int cmd_version(int argc, char **argv);
+int cmd_lls(int argc, char **argv);
+int cmd_lcat(int argc, char **argv);
+int cmd_stat(int argc, char **argv);

@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <inttypes.h>
 
+#include "debug.h"
 #include "vblk.h"
 #include "diskio.h"
 
@@ -135,11 +136,46 @@ bool vblk_resolve_to_base(const char *name,
     return true;
 }
 
-vblk_t *vblk_open(const char *dev) {
-    (void)dev;   // silence unused-parameter warning
-    return NULL; // stub
+static inline const char* base_of(const char *s) {
+    return (s && strncmp(s, "/dev/", 5) == 0) ? (s + 5) : s;
 }
 
-void vblk_close(vblk_t *blk) {
-    (void)blk;   // stub
+vblk_t *vblk_open(const char *key) {
+    DBG("vblk_open: key='%s'", key ? key : "(null)");
+    if (!key || !*key) return NULL;
+
+    /* 1) Try exact match on internal key (name) OR display path (dev) */
+    for (int i = 0; i < g_vblk_count; ++i) {
+        vblk_t *e = &g_vblk[i];
+        if (!e->name[0]) continue;
+
+        if (strcmp(e->name, key) == 0 || (e->dev[0] && strcmp(e->dev, key) == 0)) {
+            if (e->lba_size == 0) { DBG("vblk_open: reject '%s' (size=0)", key); return NULL; }
+            DBG("vblk_open: hit name='%s' dev='%s' size=%" PRIu64, e->name, e->dev, e->lba_size);
+            return e;
+        }
+    }
+
+    /* 2) If caller passed /dev/..., retry with basename */
+    const char *base = base_of(key);
+    if (base != key) {
+        DBG("vblk_open: retry with base='%s'", base);
+        for (int i = 0; i < g_vblk_count; ++i) {
+            vblk_t *e = &g_vblk[i];
+            if (strcmp(e->name, base) == 0) {
+                if (e->lba_size == 0) { DBG("vblk_open: reject base '%s' (size=0)", base); return NULL; }
+                DBG("vblk_open: hit name='%s' dev='%s' size=%" PRIu64, e->name, e->dev, e->lba_size);
+                return e;
+            }
+        }
+    }
+
+    DBG("vblk_open: not found");
+    return NULL;
+}
+
+/* If you have nothing to release, close can be a no-op for now. */
+void vblk_close(vblk_t *dev) {
+    (void)dev;
+    DBG("vblk_close: %p", (void*)dev);
 }

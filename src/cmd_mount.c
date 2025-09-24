@@ -1,4 +1,4 @@
-// src/cmd_mount.c
+// src/cmd_mount.c — mount a filesystem using the VFS router
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -48,6 +48,12 @@ static const filesystem_type_t* autoprobe_fs(vblk_t *dev) {
 // Command
 // -----------------------------------------------------------------------------
 int cmd_mount(int argc, char **argv) {
+    // No args => list mounts (prints "(no mounts)" if empty)
+    if (argc == 1) {
+        vfs_list_mounts();  // provided by VFS, prints table or "(no mounts)"
+        return 0;
+    }
+
     const char *fstype = NULL;
     const char *opts   = NULL;
     const char *device = NULL;
@@ -75,7 +81,22 @@ int cmd_mount(int argc, char **argv) {
         }
     }
 
-    // Validate (-t is optional now)
+
+
+    // -------------------------------------------------
+    DBG("  device:%-10s", device);
+	DBG("  mntpt:%-10s", mntpt);
+	vblk_t *dev1 = vblk_open(device);
+	if (!dev1) {
+		DBG("  cannot open device (vblk_open)");
+    } else {
+		DBG("  blk_open not an empty pointer");
+	}
+    vblk_close(dev1);
+	// -------------------------------------------------
+
+
+    // Validate (-t is optional)
     if (!device || !mntpt) {
         usage();
         return 1;
@@ -103,15 +124,13 @@ int cmd_mount(int argc, char **argv) {
         fstype = fs->name; // use detected name
     }
 
-    // Mount via VFS
+    // Mount via VFS (records the mount on success)
     int rc = vfs_mount_dev(fstype, device, dev, mntpt, opts ? opts : "");
     if (rc != 0) {
         fprintf(stderr, "mount: failed to mount '%s' on '%s' as '%s'\n", device, mntpt, fstype);
-        // On failure, FS did not adopt the handle; close it here.
         vblk_close(dev);
         return 1;
     }
 
-    // Success: FS owns 'dev' and VFS recorded the mount.
     return 0;
 }
