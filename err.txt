@@ -1,0 +1,150 @@
+src\blkdev.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\blkio.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\cmd_cd.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\cmd_cp.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\cmd_create.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\cmd_debug.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\cmd_do.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\cmd_echo.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\cmd_gpt.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\cmd_gpt.c:76:53: warning: If memory allocation fails, then there is a possible null pointer dereference: p [nullPointerOutOfMemory]
+    for (size_t i=0;i<len;i++) c = crc32_table[(c ^ p[i]) & 0xFFu] ^ (c >> 8);
+                                                    ^
+src\cmd_gpt.c:195:36: note: Assuming allocation function fails
+    uint8_t *hdr = (uint8_t*)malloc(h->header_size);
+                                   ^
+src\cmd_gpt.c:195:20: note: Assignment 'hdr=(uint8_t*)malloc(h->header_size)', assigned value is 0
+    uint8_t *hdr = (uint8_t*)malloc(h->header_size);
+                   ^
+src\cmd_gpt.c:198:32: note: Calling function 'crc32_calc', 1st argument 'hdr' value is 0
+    h->header_crc = crc32_calc(hdr, h->header_size);
+                               ^
+src\cmd_gpt.c:75:24: note: Assignment 'p=(const uint8_t*)data', assigned value is 0
+    const uint8_t *p = (const uint8_t*)data;
+                       ^
+src\cmd_gpt.c:76:53: note: Null pointer dereference
+    for (size_t i=0;i<len;i++) c = crc32_table[(c ^ p[i]) & 0xFFu] ^ (c >> 8);
+                                                    ^
+src\cmd_gpt.c:196:12: warning: If memory allocation fails, then there is a possible null pointer dereference: hdr [nullPointerOutOfMemory]
+    memcpy(hdr, h, h->header_size);
+           ^
+src\cmd_gpt.c:195:36: note: Assuming allocation function fails
+    uint8_t *hdr = (uint8_t*)malloc(h->header_size);
+                                   ^
+src\cmd_gpt.c:195:20: note: Assignment 'hdr=(uint8_t*)malloc(h->header_size)', assigned value is 0
+    uint8_t *hdr = (uint8_t*)malloc(h->header_size);
+                   ^
+src\cmd_gpt.c:196:12: note: Null pointer dereference
+    memcpy(hdr, h, h->header_size);
+           ^
+src\cmd_gpt.c:120:9: error: syntax error [syntaxError]
+    if (strcasecmp(type, "linuxfs")==0 || strcasecmp(type,"linux")==0) return TYPE_LINUXFS;
+        ^
+src\cmd_lls.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\cmd_lls.c:30:15: error: syntax error [syntaxError]
+              S_ISLNK(m) ? 'l' :
+              ^
+src\cmd_mkdir.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\cmd_mkfs_ext2.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\cmd_mkfs_fat.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\cmd_mkfs_ntfs.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\cmd_mkfs_vfat.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\cmd_mount.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\cmd_parted.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\cmd_partscan.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\cmd_stat.c:24:9: error: syntax error [syntaxError]
+    if (S_ISLNK(m))  return "symlink";
+        ^
+src\cmd_use.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\dev_util.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\ext2.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\ext2_dir.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\gpt.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\gu_dirent.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\guppy.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\helper.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\iso9660.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\mkfs_fat_core.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\parse.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\repl.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\vblk.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\vfs.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\vfs_ext2.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\vfs_ext2.c:258:5: error: Memory leak: ino [memleak]
+    return 0;
+    ^
+src\vfs_fat.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\vfs_iso.c:0:0: information: Limiting analysis of branches. Use --check-level=exhaustive to analyze all branches. [normalCheckLevelMaxBranches]
+
+^
+src\vfs_iso.c:356:5: error: Memory leak: ino [memleak]
+    return 0;
+    ^

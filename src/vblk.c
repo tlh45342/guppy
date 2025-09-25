@@ -86,23 +86,27 @@ bool vblk_read_bytes(vblk_t *dev, uint64_t off, uint32_t len, void *dst) {
     return true;
 }
 
-bool vblk_read_blocks(vblk_t *dev, uint32_t lba, uint32_t count, void *dst) {
-    if (!dev || !dst) return false;
+bool vblk_read_blocks(vblk_t *dev, uint64_t lba, uint32_t count, void *dst)
+{
+    if (!dev || !dst || count == 0) return false;
 
-    uint64_t off = (uint64_t)lba * (uint64_t)LSEC;
-    uint64_t bytes = (uint64_t)count * (uint64_t)LSEC;
+    /* Use the device’s configured logical block size; default to 512 if unset. */
+    uint32_t bsz = dev->block_bytes ? dev->block_bytes : 512u;
 
-    // Clamp/validate against partition size if known
-    uint64_t limit = part_bytes_limit(dev);
-    if (off > limit) return false;
-    if (bytes > limit - off) return false;
+    /* Compute absolute byte offset and total byte length, honoring lba_start. */
+    uint64_t off = (dev->lba_start + lba) * (uint64_t)bsz;
+    uint64_t len = (uint64_t)count * (uint64_t)bsz;
 
-    // Absolute byte offset on backing device
-    uint64_t abs_off = dev->lba_start * (uint64_t)LSEC;
-    abs_off += off;
-
-    // Safe to cast bytes to uint32_t because count is uint32_t and LSEC is 512
-    return diskio_pread(dev->dev[0] ? dev->dev : dev->name, abs_off, dst, (uint32_t)bytes);
+    /* Read in chunks to avoid 32-bit length limits in the backend. */
+    uint8_t *p = (uint8_t *)dst;
+    while (len > 0) {
+        uint32_t step = (len > UINT32_MAX) ? UINT32_MAX : (uint32_t)len;
+        if (!vblk_read_bytes(dev, off, step, p)) return false;
+        off += step;
+        p   += step;
+        len -= step;
+    }
+    return true;
 }
 
 bool vblk_resolve_to_base(const char *name,

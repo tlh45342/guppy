@@ -19,7 +19,6 @@
 #endif
 
 
-
 /* ---------- Feature toggles ---------- */
 #ifndef VFS_HAVE_CREATE_OP
 #define VFS_HAVE_CREATE_OP 0
@@ -162,46 +161,105 @@ static const char* comp_next(const char *s, char name[256]) {
     return s;
 }
 
-static int vfs_walk_rel(mount_rec_t *mnt, const char *rel, path_res_t *out) {
-    if (!mnt || !mnt->sb || !mnt->sb->root) return -1;
+static int vfs_walk_rel(mount_rec_t *mnt, const char *rel, path_res_t *out)
+{
+    DBG("vfs_walk_rel: Start path=\"%s\" on mount=\"%s\"",
+        rel ? rel : "(null)", mnt ? mnt->mp : "(mnt NULL)");
+    if (!mnt || !mnt->sb || !mnt->sb->root) {
+        DBG("vfs_walk_rel: Invalid mount or missing root inode");
+        return -1;
+    }
+
     inode_t *cur = mnt->sb->root;
-    inode_t *parent = cur;
+
+    /* Keep a tiny parent stack so '..' can walk up. */
+    enum { PARENT_STACK_MAX = 64 };
+    inode_t *stack[PARENT_STACK_MAX];
+    int depth = 0;                  /* number of parents on stack */
+    stack[depth++] = cur;           /* stack[0] is the root itself */
+
     char leaf[256] = {0};
 
-    if (!rel || !*rel) {
-        out->dir = cur;
+    if (!rel || *rel == '\0') {
+        out->dir  = cur;
         out->node = cur;
         out->leaf[0] = '\0';
-        out->mnt = mnt;
+        out->mnt  = mnt;
+        DBG("vfs_walk_rel: Path is mount root (inode=%p)", (void*)cur);
         return 0;
     }
 
     char comp[256];
     const char *p = rel;
     while (*p) {
-        parent = cur;
         p = comp_next(p, comp);
-        if (comp[0] == '\0') break;
+        if (comp[0] == '\0') {
+            /* Trailing slash or empty segment: nothing to do */
+            continue;
+        }
 
-        if (!cur->i_op || !cur->i_op->lookup) return -1;
+        /* VFS-level handling of dot components */
+        if (comp[0] == '.' && comp[1] == '\0') {
+            DBG("vfs_walk_rel: component '.' -> stay at %p", (void*)cur);
+            continue;
+        }
+        if (comp[0] == '.' && comp[1] == '.' && comp[2] == '\0') {
+            if (depth > 1) {
+                /* Pop to parent (do not pop past root) */
+                depth--;
+                cur = stack[depth - 1];
+            }
+            DBG("vfs_walk_rel: component '..' -> now at %p (depth=%d)",
+                (void*)cur, depth);
+            continue;
+        }
+
+        DBG("vfs_walk_rel: [%p] lookup \"%s\"", (void*)cur, comp);
+        if (!cur->i_op || !cur->i_op->lookup) {
+            DBG("vfs_walk_rel: ERROR - current inode has no lookup (not a dir?)");
+            return -1;
+        }
+
         inode_t *next = NULL;
-        if (cur->i_op->lookup(cur, comp, &next) != 0) return -1;
-
+        int rc = cur->i_op->lookup(cur, comp, &next);
+        DBG("vfs_walk_rel:    lookup returned rc=%d, next=%p", rc, (void*)next);
+        if (rc != 0) {
+            DBG("vfs_walk_rel: ERROR - lookup failed for \"%s\" (rc=%d)", comp, rc);
+            return -1;
+        }
         if (!next) {
-            strncpy(leaf, comp, sizeof leaf); leaf[sizeof leaf - 1] = '\0';
+            /* Component not found in this directory */
+            strncpy(leaf, comp, sizeof leaf);
+            leaf[sizeof leaf - 1] = '\0';
             out->dir  = cur;
             out->node = NULL;
             out->mnt  = mnt;
-            strncpy(out->leaf, leaf, sizeof out->leaf); out->leaf[sizeof out->leaf - 1] = '\0';
+            strncpy(out->leaf, leaf, sizeof out->leaf);
+            out->leaf[sizeof out->leaf - 1] = '\0';
+            DBG("vfs_walk_rel: \"%s\" not found under dir %p; stopping",
+                comp, (void*)cur);
             return 0;
         }
+
+        /* Descend: push current as parent if room remains */
+        if (depth < PARENT_STACK_MAX) stack[depth++] = next;
         cur = next;
+
+        DBG("vfs_walk_rel: --> Found \"%s\" inode=%p%s",
+            comp, (void*)cur,
+            (cur->i_op && cur->i_op->lookup) ? " [DIR]" : " [FILE]");
     }
+
+    /* Fully resolved. Parent is the previous element on the stack (or self at root). */
+    inode_t *parent = (depth > 1) ? stack[depth - 2] : cur;
 
     out->dir  = parent;
     out->node = cur;
     out->leaf[0] = '\0';
     out->mnt  = mnt;
+
+    DBG("vfs_walk_rel: DONE. Final node=%p (parent=%p, depth=%d)",
+        (void*)out->node, (void*)out->dir, depth);
     return 0;
 }
 
@@ -223,28 +281,62 @@ int vfs_mount_dev(const char *fstype,
                   const char *mountpoint,
                   const char *opts)
 {
-    if (!fstype || !src || !dev || !mountpoint) return -1;
+    if (!fstype || !src || !dev || !mountpoint) {
+        DBG("vfs: mount: invalid args fstype=%p src=%p dev=%p mp=%p", (void*)fstype, (void*)src, (void*)dev, (void*)mountpoint);
+        return -1;
+    }
+
     const filesystem_type_t *fs = vfs_find_fs(fstype);
-    if (!fs || !fs->mount) return -1;
+    if (!fs || !fs->mount) {
+        DBG("vfs: mount: unknown fs '%s' or missing mount()", fstype ? fstype : "(null)");
+        return -1;
+    }
 
     char mp[VFS_PATH_MAX];
     vfs_normalize_path(mountpoint, mp, sizeof mp);
 
-    for (int i = 0; i < g_mnt_n; ++i)
-        if (strcmp(g_mnt[i].mp, mp) == 0) return -1; /* already mounted here */
+    /* deny duplicate mountpoint */
+    for (int i = 0; i < g_mnt_n; ++i) {
+        if (strcmp(g_mnt[i].mp, mp) == 0) {
+            DBG("vfs: mount: mountpoint '%s' already in use", mp);
+            return -1;
+        }
+    }
 
-    if (g_mnt_n >= VFS_MAX_MOUNTS) return -1;
+    if (g_mnt_n >= VFS_MAX_MOUNTS) {
+        DBG("vfs: mount: mount table full (%d >= %d)", g_mnt_n, VFS_MAX_MOUNTS);
+        return -1;
+    }
 
     superblock_t *sb = NULL;
-    int rc = fs->mount(dev, opts ? opts : "", &sb);
-    if (rc != 0 || !sb) return -1;
+    const char *mopts = (opts && *opts) ? opts : "";
+    int rc = fs->mount(dev, mopts, &sb);
+    DBG("vfs: fs->mount('%s','%s') rc=%d sb=%p", fstype, mopts, rc, (void*)sb);
 
+    if (rc != 0 || !sb) {
+        DBG("vfs: mount failed: rc=%d sb=%p", rc, (void*)sb);
+        return -1;
+    }
+    if (!sb->root) {
+        DBG("vfs: mount: filesystem returned NULL root");
+        if (sb->s_op && sb->s_op->kill_sb) sb->s_op->kill_sb(sb);
+        return -1;
+    }
+
+    /* record */
     mount_rec_t *m = &g_mnt[g_mnt_n++];
     strncpy(m->mp, mp, sizeof m->mp); m->mp[sizeof m->mp - 1] = '\0';
     m->sb = sb;
     snprintf(m->src,    sizeof m->src,    "%s", src);
     snprintf(m->fstype, sizeof m->fstype, "%s", fstype);
-    snprintf(m->opts,   sizeof m->opts,   "%s", (opts && *opts) ? opts : "rw");
+
+    /* if caller didn’t pass opts, reflect readonly flag */
+    const bool ro = (sb->s_flags & VFS_SB_RDONLY) != 0;
+    snprintf(m->opts, sizeof m->opts, "%s", (opts && *opts) ? opts : (ro ? "ro" : "rw"));
+
+    DBG("vfs: mount '%s' on '%s' type='%s' opts='%s' (root=%p)",
+        m->src, m->mp, m->fstype, m->opts, (void*)sb->root);
+
     return 0;
 }
 

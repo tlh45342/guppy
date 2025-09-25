@@ -1,7 +1,12 @@
 // include/iso9660.h
+
 #pragma once
 #include <stdint.h>
 #include <stdbool.h>
+
+#ifndef ISO_SECTOR_SIZE
+#define ISO_SECTOR_SIZE 2048u
+#endif
 
 /* Forward-declare your block device type.
    If you already have vblk.h, include it instead and remove this forward decl. */
@@ -38,9 +43,38 @@ typedef struct iso9660 {
 /* API */
 bool iso_mount(vblk_t *dev, iso9660_t *out);
 
+/**
+ * Read exactly one ISO9660 logical sector (2048 bytes) from an ISO image.
+ *
+ * Parameters:
+ *   iso  - (INPUT, const) Pointer to a mounted ISO9660 context. Must be non-NULL and
+ *          must contain a valid backing virtual block device handle (iso->dev).
+ *          This function does not modify *iso (hence the const).
+ *
+ *   lba  - (INPUT) ISO9660 Logical Block Address (LBA) in **2048-byte units**,
+ *          counted from the start of the ISO image. For reference, the Primary
+ *          Volume Descriptor (PVD) is at LBA 16 in a compliant image.
+ *          This is **not** a byte offset and **not** the vblk’s 512-byte LBA.
+ *
+ *   dst  - (OUTPUT) Caller-provided buffer with space for **ISO_SECTOR_SIZE bytes**
+ *          (typically 2048). On success, the function fills this buffer with the
+ *          entire sector at the given ISO LBA. Must be non-NULL.
+ *
+ * Returns:
+ *   true  - if one full 2048-byte ISO sector was read into 'dst'.
+ *   false - on any failure (invalid args; I/O error from the underlying device;
+ *           out-of-range request; partial read not permitted).
+*/
+
+bool iso_read_sector(const iso9660_t *iso, uint32_t lba, void *dst);
+
+// ----------------------------------------------------------------------------------------
+
 /* Resolve a directory by path like "/BOOT" or "/EFI/BOOT". */
-bool iso_lookup_dir(iso9660_t *iso, const char *path,
-                    uint32_t *out_dir_lba, uint32_t *out_dir_size);
+bool iso_lookup_dir(iso9660_t *iso,
+                    const char *path,
+                    uint32_t *out_dir_lba,
+                    uint32_t *out_dir_size);
 
 /* Enumerate entries in a directory extent. */
 bool iso_list_dir(iso9660_t *iso, uint32_t dir_lba, uint32_t dir_size,
@@ -54,3 +88,13 @@ bool iso_read_file_by_path(iso9660_t *iso, const char *path,
 /* Resolve a path to its extent info (final component). */
 bool iso_stat_path(iso9660_t *iso, const char *path,
                    uint32_t *out_lba, uint32_t *out_size, int *out_is_dir);
+				   
+
+// --------------------------------------------------------------------------
+// Really in iso9660_walk.c but who's counting?
+
+int  iso_walk_component(const iso9660_t *iso,
+                        uint32_t dir_lba, uint32_t dir_size,
+                        const char *want,
+                        uint32_t *out_lba, uint32_t *out_size,
+                        uint8_t  *out_flags);

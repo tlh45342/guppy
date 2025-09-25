@@ -1,0 +1,104 @@
+
+
+
+iso9660.c
+- iso_dirrec_fits
+- is_joliet_svd
+- ucs2be_to_utf8
+- iso_read_sector
+- read_blocks
+- iso_mount
+- walk_component
+- iso_lookup_dir
+- iso_list_dir
+- iso_read_file_by_path
+- iso_stat_path
+
+vfs_iso.c
+- iso_probe
+- iso_mount_fs
+_ iso_umount_fs
+* DEFINES VFS_ISO9660
+
+src/blkdev.c
+  int add_disk(struct gendisk *gd);
+  gpt_validate_at
+  static int scan_gpt
+  disk_scan_partitions
+  del_disk
+  block_rescan
+  scan_mbr
+  scan_ebr_chain
+
+src/cmd_echo
+src/cmd_cat
+src/cmd_register
+src/cmd_ls
+src/cmd_use
+src/cmd_mount
+
+src/ext2.c
+  ext2_create_and_write
+  pwrite_bytes_at
+  pwrite_block
+  mkfs_ext2_core
+  pread_bytes_at
+  pread_bytes_at
+
+src/vfs.c
+  vfs_mount_t
+  vfs_mount
+  vfs_unmount
+  vfs_stat
+  vfs_readdir
+  vfs_read_all
+  vfs_mkdir
+  vfs_write
+  vfs_iso_mountpoint 
+
+src/blkio.c
+  find_file_for_abs
+  blkio_map_image
+  blk_read_bytes
+  blk_write_bytes
+
+src/diskio.c
+  file_pread   path read   size
+  file_pwrite  path write  size
+  filesize_bytes
+  map_find_index
+  is_devkey
+  diskio_detach
+  diskio_pread
+  diskio_pwrite
+  diskio_size_bytes
+
+src/devmap.c
+
+src/gpt.c
+
+src/mbr.c
+
+src/mnttab.c
+
+src/fileutil.c
+  file_read_at
+  file_write_at
+  file_read_at_path
+  file_read_at_path
+  file_ensure_size
+
+src/cwd.c
+
+src.c/vblk.c
+  vblk_t *vblk_by_name
+  vblk_register
+  part_bytes_limit
+  vblk_read_bytes
+  vblk_read_block
+  vblk_resolve_to_base
+
+src/virtblock.c
+  virtio_blk_read
+  virtio_blk_write
+
