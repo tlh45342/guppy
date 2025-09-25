@@ -520,3 +520,15 @@ int vfs_init(void) {
     (void)vfs_register(&VFS_ISO9660);
     return 0;
 }
+
+int vfs_readlink(const char *path, char *buf, size_t bufsz) {
+    if (!path || !buf || bufsz == 0) return -1;
+    path_res_t r;
+    if (vfs_resolve_path(path, &r) != 0) return -1;
+    if (!r.node || !r.node->i_op || !r.node->i_op->readlink) return -1;
+    /* Contract: return number of bytes written (like readlink), and ensure NUL at caller if desired. */
+    int n = r.node->i_op->readlink(r.node, buf, bufsz - 1);
+    if (n < 0) return -1;
+    if ((size_t)n < bufsz) buf[n] = '\0';  /* convenience for callers */
+    return n;
+}

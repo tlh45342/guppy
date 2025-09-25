@@ -63,27 +63,7 @@ typedef struct {
 } iso_dirrec_t;
 #pragma pack(pop)
 
-static bool iso_dirrec_fits(const uint8_t *blk, uint32_t bs, uint32_t off) {
-    if (off + sizeof(iso_dirrec_t) > bs) return false;
-    const iso_dirrec_t *dr = (const iso_dirrec_t *)(blk + off);
-    uint8_t len = dr->len_dr;
-    if (len == 0) return true; /* padding at end of sector */
-    uint8_t        fiLen = dr->fi_len;
-    uint32_t need = (uint32_t)sizeof(*dr) + (uint32_t)fiLen + ((fiLen & 1u) ? 1u : 0u);
-    if (need > len) return false;
-    return (off + len) <= bs;
-}
-
 /* ============================ Joliet & Names ============================ */
-
-static int is_joliet_svd(const uint8_t *sec /* 2048 bytes */) {
-    if (sec[0] != 2) return 0;                // Type 2 = SVD
-    if (memcmp(sec + 1, "CD001", 5) != 0) return 0;
-    if (sec[6] != 1) return 0;
-    const uint8_t *esc = sec + 88;            // escape seq
-    return (esc[0] == 0x25 && esc[1] == 0x2F &&
-            (esc[2] == 0x40 || esc[2] == 0x43 || esc[2] == 0x45));
-}
 
 static size_t ucs2be_to_utf8(const uint8_t *in, size_t in_len, char *out, size_t out_cap) {
     size_t oi = 0;
@@ -106,23 +86,6 @@ static size_t ucs2be_to_utf8(const uint8_t *in, size_t in_len, char *out, size_t
     }
     if (oi < out_cap) out[oi] = '\0';
     return oi;
-}
-
-static void decode_dir_name(const uint8_t *fi, uint8_t fi_len, int use_joliet,
-                            char *out, size_t out_cap)
-{
-    if (is_dot_special(fi, fi_len)) { // "." / ".."
-        snprintf(out, out_cap, (fi[0] == 0x00) ? "." : "..");
-        return;
-    }
-    if (use_joliet) {
-        (void)ucs2be_to_utf8(fi, fi_len, out, out_cap);
-    } else {
-        size_t n = (fi_len < out_cap - 1) ? fi_len : (out_cap - 1);
-        memcpy(out, fi, n); out[n] = '\0';
-        for (char *p = out; *p; ++p) *p = (char)to_upper_ascii((unsigned char)*p);
-        trim_version_semicolon(out);
-    }
 }
 
 /* ============================ ISO-sector Read Helpers ============================ */

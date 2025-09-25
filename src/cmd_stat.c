@@ -8,6 +8,12 @@
 #include <unistd.h>
 #include <time.h>
 #include <inttypes.h>
+#include <limits.h>  // probably should be virtual but it would equal the same?
+
+#ifndef _XOPEN_SOURCE
+#define _XOPEN_SOURCE 700   // expose readlink() on POSIX libc (glibc/musl/cygwin)
+#endif
+#include <unistd.h>         // declares readlink()
 
 #include "debug.h"
 #ifndef DBG
@@ -17,6 +23,8 @@
 static void usage(void) {
     printf("usage: stat <path>\n");
 }
+
+#include "vfs.h"
 
 static const char* type_str(mode_t m) {
     if (S_ISREG(m))  return "regular file";
@@ -63,13 +71,17 @@ int cmd_stat(int argc, char **argv) {
     printf("Modify: %s\n", mtime);
     printf("Change: %s\n", ctime_);
 
-#ifdef S_ISLNK
     if (S_ISLNK(st.st_mode)) {
-        char linkto[4096];
-        ssize_t n = readlink(path, linkto, sizeof(linkto)-1);
-        if (n >= 0) { linkto[n] = '\0'; printf(" Target: %s\n", linkto); }
+		char linkto[PATH_MAX];
+		int n = vfs_readlink(path, linkto, sizeof(linkto));
+		if (n >= 0) {
+			/* vfs_readlink() leaves NUL room; but be defensive anyway */
+			linkto[(n < (int)sizeof(linkto)) ? n : (int)sizeof(linkto) - 1] = '\0';
+			printf(" -> %s\n", linkto);
+		} else {
+			puts(" -> (unreadable link)");
+		}
     }
-#endif
 
     return 0;
 }

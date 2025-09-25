@@ -1,82 +1,20 @@
 // src/vfs_iso.c — ISO9660 (read-only) driver glue for Guppy VFS
-// C11, no C++ features. Handles Primary ISO9660 names (uppercase + ;version).
+// C11 only. Primary ISO9660 names (uppercase + optional ;1 version).
+
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
 #include <stddef.h>   // offsetof
 #include <stdbool.h>
 #include <ctype.h>
-#include <stdio.h> 
+#include <errno.h>
 
 #include "vfs.h"
 #include "vfs_stat.h"
-#include "iso9660.h"   // iso9660_t, iso_mount(), iso_read_sector()
+#include "iso9660.h"   // iso9660_t, iso_mount(), iso_read_sector(), iso_walk_component()
 #include "debug.h"     // DBG()
 
-/* forward declaration for fs_type assignment */
 extern const filesystem_type_t VFS_ISO9660;
-
-/* ===== helpers ===== */
-static inline uint32_t rd_le32(const uint8_t *p) {
-    return ((uint32_t)p[0])
-         | ((uint32_t)p[1] << 8)
-         | ((uint32_t)p[2] << 16)
-         | ((uint32_t)p[3] << 24);
-}
-
-/* normalize Primary ISO name:
-   - copy disk ident (ASCII) to tmp
-   - strip ";NNN" version
-   - strip single trailing '.'
-   Result placed in buf (cap bytes), NUL-terminated. */
-static void iso_primary_ident_to_cstr(const uint8_t *ident, size_t id_len,
-                                      char *buf, size_t cap) {
-    if (cap == 0) return;
-    size_t n = (id_len < cap - 1) ? id_len : cap - 1;
-    for (size_t i = 0; i < n; ++i) buf[i] = (char)ident[i];
-    buf[n] = '\0';
-    char *semi = strchr(buf, ';');
-    if (semi) *semi = '\0';
-    size_t L = strlen(buf);
-    if (L && buf[L - 1] == '.') buf[L - 1] = '\0';
-}
-
-/* case-insensitive compare of user component (want) to Primary ident (disk):
-   - normalize disk ident (strip ;ver, trailing '.')
-   - compare ignoring case
-   Also accept if user provided ";1" explicitly. */
-static bool iso_primary_name_matches(const char *want,
-                                     const uint8_t *ident, size_t id_len) {
-    char disk[256];
-    iso_primary_ident_to_cstr(ident, id_len, disk, sizeof disk);
-
-    // lower-case a copy of want (component only)
-    char w[256];
-    size_t wl = 0;
-    for (; want[wl] && want[wl] != '/' && wl < sizeof w - 1; ++wl) {
-        char c = want[wl];
-        if (c == '\\') c = '/';
-        w[wl] = (char)tolower((unsigned char)c);
-    }
-    w[wl] = '\0';
-
-    // compare ignoring case (disk typically uppercase)
-#if defined(_MSC_VER)
-    #define STRCASECMP _stricmp
-#else
-    #include <strings.h>
-    #define STRCASECMP strcasecmp
-#endif
-    if (STRCASECMP(disk, w) == 0) return true;
-
-    // allow user to include ";1"
-    char wver[260];
-    if (wl + 2 < sizeof wver) {
-        snprintf(wver, sizeof wver, "%s;1", w);
-        if (STRCASECMP(disk, wver) == 0) return true;
-    }
-    return false;
-}
 
 /* ===== Mount state kept in superblock->fs_private ===== */
 typedef struct {
@@ -91,6 +29,40 @@ typedef struct {
     uint32_t  extent_size;  // size in bytes of this extent
 } iso_inode_t;
 
+/* ===== helpers: ASCII name handling for Primary ISO9660 ===== */
+static inline int to_upper_ascii(unsigned char c) {
+    return (c >= 'a' && c <= 'z') ? (c - 'a' + 'A') : c;
+}
+
+static inline uint32_t rd_le32(const uint8_t *p) {
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
+static void trim_version_semicolon(char *s) {
+    size_t n = strlen(s);
+    for (size_t i = 0; i < n; ++i) {
+        if (s[i] == ';') { s[i] = '\0'; break; }
+    }
+}
+
+static void iso_primary_ident_to_cstr(const uint8_t *id, uint8_t id_len,
+                                      char *out, size_t out_cap)
+{
+    if (!out || out_cap == 0) return;
+    out[0] = '\0';
+    if (!id || id_len == 0) return;
+
+    // ISO9660 primary identifiers are generally upper-case plus '.' and ';'
+    size_t n = (id_len < (uint8_t)(out_cap - 1)) ? id_len : (out_cap - 1);
+    for (size_t i = 0; i < n; ++i) {
+        unsigned char c = id[i];
+        if (c == 0) break;
+        if (c == '/') c = '_';
+        out[i] = (char)to_upper_ascii(c);
+    }
+    out[n] = '\0';
+}
+
 /* ===== super_ops ===== */
 static int iso_statfs(struct superblock *sb, struct g_statvfs *sv) {
     if (!sb || !sv) return -1;
@@ -98,17 +70,22 @@ static int iso_statfs(struct superblock *sb, struct g_statvfs *sv) {
     sv->f_bsize   = sb->block_size ? sb->block_size : 2048;
     sv->f_frsize  = sv->f_bsize;
     sv->f_namemax = 255;
-    sv->f_flag    = G_VFS_FLAG_RDONLY;
     return 0;
 }
-static int  iso_syncfs(struct superblock *sb) { (void)sb; return 0; }
+
+static int iso_syncfs(struct superblock *sb) { (void)sb; return 0; }
+
 static void iso_kill_sb(struct superblock *sb) {
     if (!sb) return;
+    iso_fs_t *fs = (iso_fs_t*)sb->fs_private;
+
+    // free root inode payload first
     if (sb->root) {
-        free(sb->root->i_private);
+        iso_inode_t *rip = (iso_inode_t*)sb->root->i_private;
+        free(rip);
         free(sb->root);
     }
-    free(sb->fs_private);
+    free(fs);
     free(sb);
 }
 
@@ -135,103 +112,88 @@ static int iso_file_release(struct file *f) { free(f); return 0; }
 static ssize_t iso_file_read(struct file *f, void *buf, size_t n, uint64_t *ppos) {
     if (!f || !buf || !ppos) return -1;
     iso_inode_t *ip = (iso_inode_t*)f->f_inode->i_private;
-    if (!ip || ip->is_dir) return -1;
+    if (!ip || ip->is_dir) return -EISDIR;
 
     const uint32_t bs = f->f_inode->i_sb ? f->f_inode->i_sb->block_size : 2048;
     uint64_t pos = *ppos;
     if (pos >= ip->extent_size) return 0; // EOF
+    if (n > (size_t)(ip->extent_size - pos)) n = (size_t)(ip->extent_size - pos);
 
-    size_t to_read = n;
-    if (pos + to_read > ip->extent_size) to_read = ip->extent_size - (size_t)pos;
+    uint8_t *dst = (uint8_t*)buf;
+    size_t   copied = 0;
 
-    uint8_t *out = (uint8_t*)buf;
-    size_t copied = 0;
+    uint32_t lba = ip->extent_lba + (uint32_t)(pos / bs);
+    uint32_t in_sector = (uint32_t)(pos % bs);
 
-    while (copied < to_read) {
-        uint64_t off    = pos + copied;
-        uint32_t si     = (uint32_t)(off / bs);
-        uint32_t so     = (uint32_t)(off % bs);
-        uint32_t lba    = ip->extent_lba + si;
+    while (copied < n) {
+        uint8_t sec[2048];
+        if (!iso_read_sector(&ip->fs->iso, lba, sec)) return (copied > 0) ? (ssize_t)copied : -EIO;
 
-        uint8_t sec[4096];
-        if (bs > sizeof sec) return -1; // guard
-        if (!iso_read_sector(&ip->fs->iso, lba, sec)) break;
+        size_t take = bs - in_sector;
+        size_t left = n - copied;
+        if (take > left) take = left;
 
-        size_t avail = bs - so;
-        size_t need  = to_read - copied;
-        size_t take  = (avail < need) ? avail : need;
-
-        memcpy(out + copied, sec + so, take);
-        copied += take;
+        memcpy(dst + copied, sec + in_sector, take);
+        copied    += take;
+        pos       += take;
+        lba       += 1;
+        in_sector  = 0;
     }
 
-    *ppos += copied;
+    *ppos = pos;
     return (ssize_t)copied;
 }
 
 static const file_ops_t ISO_FILE_FOPS = {
-    .open    = iso_file_open,
-    .release = iso_file_release,
-    .read    = iso_file_read,
-    .write   = NULL,
-    .fsync   = NULL,
-    .ioctl   = NULL,
-    .llseek  = NULL,
+    .open       = iso_file_open,
+    .release    = iso_file_release,
+    .read       = iso_file_read,
+    .write      = NULL,
+    .fsync      = NULL,
+    .ioctl      = NULL,
+    .llseek     = NULL,
     .getdents64 = NULL,
 };
 
 /* ===== directory file_ops ===== */
 static ssize_t iso_dir_getdents64(struct file *dirf, void *buf, size_t bytes) {
-    if (!dirf || !dirf->f_inode || !buf || bytes < sizeof(vfs_dirent64_t)+2) return -1;
+    if (!dirf || !buf) return -1;
 
-    inode_t     *ino = dirf->f_inode;
-    iso_inode_t *ip  = (iso_inode_t*)ino->i_private;
-    if (!ip || !ip->is_dir) return -1;
+    iso_inode_t *dip = (iso_inode_t*)dirf->f_inode->i_private;
+    if (!dip || !dip->is_dir) return -ENOTDIR;
 
-    const uint32_t bs   = ino->i_sb ? ino->i_sb->block_size : 2048;
-    const uint32_t base = ip->extent_lba;
-    const uint32_t dsz  = ip->extent_size;
+    const uint32_t bs   = dirf->f_inode->i_sb ? dirf->f_inode->i_sb->block_size : 2048;
+    const uint32_t base = dip->extent_lba;
+    const uint32_t dsz  = dip->extent_size;
 
-    uint8_t  sec[4096];  // supports bs up to 4096
-    size_t   written = 0;
-    uint64_t pos = dirf->f_pos; // byte offset within the dir extent
+    uint64_t pos = dirf->f_pos;
+    size_t written = 0;
 
-    while (written + sizeof(vfs_dirent64_t) + 2 <= bytes) {
-        if (pos >= dsz) break; // EOF
-
+    while (pos < dsz) {
         uint32_t si = (uint32_t)(pos / bs);
         uint32_t so = (uint32_t)(pos % bs);
 
-        // read current sector
-        if (!iso_read_sector(&ip->fs->iso, base + si, sec)) {
-            return (written > 0) ? (ssize_t)written : -1;
+        uint8_t sec[2048];
+        if (!iso_read_sector(&dip->fs->iso, base + si, sec)) {
+            return (written > 0) ? (ssize_t)written : -EIO;
         }
 
         if (so >= bs) { pos = (uint64_t)(si + 1) * bs; continue; }
 
         uint8_t *rec = sec + so;
-        uint8_t len  = rec[0];
+        uint8_t  len = rec[0];
 
-        if (len == 0) {
-            // padding to end-of-sector: advance to next sector
-            pos = (uint64_t)(si + 1) * bs;
-            continue;
-        }
+        if (len == 0) { pos = (uint64_t)(si + 1) * bs; continue; }
+        if (so + len > bs) { pos = (uint64_t)(si + 1) * bs; continue; }
 
-        // If record crosses sector boundary, skip to next sector
-        if (so + len > bs) {
-            pos = (uint64_t)(si + 1) * bs;
-            continue;
-        }
+        uint8_t  id_len   = rec[32];
+        const uint8_t *id = rec + 33;
 
-        // ISO9660 primary dir record fields
-        uint32_t extent_lba = rd_le32(rec + 2);   // LE part of dual-endian field
+        uint32_t extent_lba = rd_le32(rec + 2);
         uint32_t data_len   = rd_le32(rec + 10);
         uint8_t  flags      = rec[25];
-        uint8_t  id_len     = rec[32];
-        const uint8_t *id   = rec + 33;
 
-        // name
+        // Convert ISO identifier -> C string
         char name[256];
         if (id_len == 1 && id[0] == 0) {
             strcpy(name, ".");
@@ -239,6 +201,7 @@ static ssize_t iso_dir_getdents64(struct file *dirf, void *buf, size_t bytes) {
             strcpy(name, "..");
         } else {
             iso_primary_ident_to_cstr(id, id_len, name, sizeof name);
+            trim_version_semicolon(name);
         }
 
         uint8_t dtype = (flags & 0x02) ? VFS_DT_DIR : VFS_DT_REG;
@@ -248,7 +211,7 @@ static ssize_t iso_dir_getdents64(struct file *dirf, void *buf, size_t bytes) {
         if (written + need > bytes) break;
 
         vfs_dirent64_t *de = (vfs_dirent64_t *)((uint8_t*)buf + written);
-        de->d_ino    = extent_lba;             // use extent start as a stable id
+        de->d_ino    = extent_lba;             // use extent start as stable id
         de->d_off    = (int64_t)(pos + len);   // next record position
         de->d_reclen = (uint16_t)need;
         de->d_type   = dtype;
@@ -256,7 +219,7 @@ static ssize_t iso_dir_getdents64(struct file *dirf, void *buf, size_t bytes) {
 
         written += need;
         pos     += len; // next record
-        (void)data_len; // (not used here; kept for potential validation)
+        (void)data_len; // not used here
     }
 
     dirf->f_pos = pos;
@@ -266,45 +229,23 @@ static ssize_t iso_dir_getdents64(struct file *dirf, void *buf, size_t bytes) {
 static int iso_dir_open(struct inode *inode, struct file **out, int flags, uint32_t mode) {
     (void)mode;
     if (!inode || !out) return -1;
-    if ((flags & VFS_O_DIRECTORY) == 0) return -1;
+    if (!(flags & VFS_O_DIRECTORY)) return -ENOTDIR;
 
     iso_inode_t *ip = (iso_inode_t*)inode->i_private;
-    if (!ip || !ip->is_dir) return -1;
+    if (!ip || !ip->is_dir) return -ENOTDIR;
 
     struct file *f = (struct file*)calloc(1, sizeof *f);
     if (!f) return -1;
     f->f_inode = inode;
     f->f_flags = flags;
     f->f_pos   = 0;
-
-    static const file_ops_t FOPS_DIR = {
-        .open       = iso_dir_open,
-        .release    = NULL,
-        .read       = NULL,
-        .write      = NULL,
-        .fsync      = NULL,
-        .ioctl      = NULL,
-        .llseek     = NULL,
-        .getdents64 = iso_dir_getdents64,
-    };
-    f->f_op = &FOPS_DIR;
-
     *out = f;
     return 0;
 }
 
 /* ===== inode_ops ===== */
-static int iso_getattr(struct inode *ino, struct g_stat *st) {
-    if (!ino || !st) return -1;
-    memset(st, 0, sizeof *st);
-    iso_inode_t *ip = (iso_inode_t*)ino->i_private;
-    if (!ip) return -1;
-    st->st_mode = ip->is_dir ? VFS_S_IFDIR : VFS_S_IFREG;
-    st->st_size = ip->extent_size;
-    return 0;
-}
 
-/* Walk a directory extent and find a child by name (Primary ISO), returns new inode */
+/* lookup: build a new inode from an ISO dir entry (Primary) */
 static int iso_lookup(struct inode *dir, const char *name, struct inode **out) {
     if (out) *out = NULL;
     if (!dir || !name || !out) return -1;
@@ -312,80 +253,69 @@ static int iso_lookup(struct inode *dir, const char *name, struct inode **out) {
     iso_inode_t *dip = (iso_inode_t*)dir->i_private;
     if (!dip || !dip->is_dir) return -1;
 
-    const uint32_t bs   = dir->i_sb ? dir->i_sb->block_size : 2048;
-    const uint32_t base = dip->extent_lba;
-    const uint32_t dsz  = dip->extent_size;
+    uint32_t lba = 0, size = 0;
+    uint8_t  flags = 0;
 
-    uint8_t sec[4096];
-    uint64_t pos = 0;
-
-    while (pos < dsz) {
-        uint32_t si = (uint32_t)(pos / bs);
-        uint32_t so = (uint32_t)(pos % bs);
-
-        if (!iso_read_sector(&dip->fs->iso, base + si, sec)) return -1;
-
-        if (so >= bs) { pos = (uint64_t)(si + 1) * bs; continue; }
-
-        uint8_t *rec = sec + so;
-        uint8_t len  = rec[0];
-
-        if (len == 0) { pos = (uint64_t)(si + 1) * bs; continue; }
-        if (so + len > bs) { pos = (uint64_t)(si + 1) * bs; continue; }
-
-        uint8_t  id_len     = rec[32];
-        const uint8_t *id   = rec + 33;
-
-        // skip special entries unless explicitly requested
-        if (!(id_len == 1 && (id[0] == 0 || id[0] == 1))) {
-            if (iso_primary_name_matches(name, id, id_len)) {
-                uint32_t extent_lba = rd_le32(rec + 2);
-                uint32_t data_len   = rd_le32(rec + 10);
-                uint8_t  flags      = rec[25];
-                bool is_dir = (flags & 0x02) != 0;
-
-                inode_t *child = (inode_t*)calloc(1, sizeof *child);
-                iso_inode_t *cip = (iso_inode_t*)calloc(1, sizeof *cip);
-                if (!child || !cip) { free(child); free(cip); return -1; }
-
-                cip->fs         = dip->fs;
-                cip->is_dir     = is_dir;
-                cip->extent_lba = extent_lba;
-                cip->extent_size= data_len;
-
-                child->i_ino    = extent_lba; // stable id: start LBA
-                child->i_mode   = (is_dir ? VFS_S_IFDIR : VFS_S_IFREG) |
-                                   (is_dir ? VFS_MODE_DIR_0755 : VFS_MODE_FILE_0644);
-                child->i_sb     = dir->i_sb;
-                child->i_op     = dir->i_op; // same ops table
-                child->i_fop    = is_dir ? NULL : &ISO_FILE_FOPS; // dir open via i_fop below
-                child->i_private= cip;
-
-                if (is_dir) {
-                    // directory open handler
-                    static const file_ops_t FOPS_DIR = {
-                        .open       = iso_dir_open,
-                        .release    = NULL,
-                        .read       = NULL,
-                        .write      = NULL,
-                        .fsync      = NULL,
-                        .ioctl      = NULL,
-                        .llseek     = NULL,
-                        .getdents64 = iso_dir_getdents64,
-                    };
-                    child->i_fop = &FOPS_DIR;
-                }
-
-                *out = child;
-                return 0;
-            }
-        }
-
-        pos += len;
+    int rc = iso_walk_component(&dip->fs->iso,
+                                dip->extent_lba, dip->extent_size,
+                                name, &lba, &size, &flags);
+    if (rc != 1) {
+        DBG("iso_lookup: '%s' not found rc=%d", name, rc);
+        return -ENOENT;
     }
 
-    // not found
-    *out = NULL;
+    const bool is_dir = (flags & 0x02) != 0;
+
+    inode_t *child = (inode_t*)calloc(1, sizeof *child);
+    iso_inode_t *cip = (iso_inode_t*)calloc(1, sizeof *cip);
+    if (!child || !cip) { free(child); free(cip); return -ENOMEM; }
+
+    cip->fs          = dip->fs;
+    cip->is_dir      = is_dir;
+    cip->extent_lba  = lba;
+    cip->extent_size = size;
+
+    child->i_ino     = lba; // stable id: start LBA
+    child->i_mode    = (is_dir ? VFS_S_IFDIR : VFS_S_IFREG) |
+                       (is_dir ? VFS_MODE_DIR_0755 : VFS_MODE_FILE_0644);
+    child->i_sb      = dir->i_sb;
+    child->i_op      = dir->i_op; // same ops table
+    child->i_private = cip;
+
+    if (is_dir) {
+        static const file_ops_t FOPS_DIR = {
+            .open       = iso_dir_open,
+            .release    = NULL,
+            .read       = NULL,
+            .write      = NULL,
+            .fsync      = NULL,
+            .ioctl      = NULL,
+            .llseek     = NULL,
+            .getdents64 = iso_dir_getdents64,
+        };
+        child->i_fop = &FOPS_DIR;
+    } else {
+        child->i_fop = &ISO_FILE_FOPS;
+    }
+
+    *out = child;
+
+    DBG("iso_lookup: name='%s' -> lba=%u size=%u flags=0x%02X (%s)",
+        name, lba, size, flags, is_dir ? "DIR" : "FILE");
+    return 0;
+}
+
+static int iso_getattr(struct inode *inode, struct g_stat *st) {
+    if (!inode || !st) return -1;
+    memset(st, 0, sizeof *st);
+    iso_inode_t *ip = (iso_inode_t*)inode->i_private;
+    if (!ip) return -1;
+
+    st->st_mode  = inode->i_mode;
+    st->st_ino   = inode->i_ino;
+    st->st_nlink = 1;
+    st->st_size  = ip->extent_size;
+    st->st_blksize = inode->i_sb ? inode->i_sb->block_size : 2048;
     return 0;
 }
 
@@ -400,6 +330,7 @@ static const inode_ops_t ISO_IOPS = {
 };
 
 /* ===== probe / mount / umount ===== */
+
 static bool iso_probe(vblk_t *dev, char *label_out, size_t label_cap) {
     iso9660_t tmp;
     bool ok = iso_mount(dev, &tmp);
@@ -407,22 +338,15 @@ static bool iso_probe(vblk_t *dev, char *label_out, size_t label_cap) {
     return ok;
 }
 
-/* src/vfs_iso.c */
 static int iso_mount_fs(vblk_t *dev, const char *opts, superblock_t **out_sb) {
-    if (!out_sb) {
-        DBG("iso_mount_fs: out_sb is NULL");
-        return -1;
-    }
+    (void)opts;
+    if (!out_sb) return -1;
     *out_sb = NULL;
 
     DBG("iso_mount_fs: enter dev=%p opts='%s'", (void*)dev, opts ? opts : "");
 
     iso_fs_t *fs = (iso_fs_t*)calloc(1, sizeof *fs);
-    if (!fs) {
-        DBG("iso_mount_fs: calloc(fs) failed");
-        return -1;
-    }
-
+    if (!fs) { DBG("iso_mount_fs: calloc(fs) failed"); return -1; }
     if (!iso_mount(dev, &fs->iso)) {
         DBG("iso_mount_fs: iso_mount failed");
         free(fs);
@@ -433,35 +357,20 @@ static int iso_mount_fs(vblk_t *dev, const char *opts, superblock_t **out_sb) {
         fs->iso.root_lba, fs->iso.root_size, fs->iso.block_size);
 
     superblock_t *sb = (superblock_t*)calloc(1, sizeof *sb);
-    if (!sb) {
-        DBG("iso_mount_fs: calloc(sb) failed");
-        free(fs);
-        return -1;
-    }
+    if (!sb) { DBG("iso_mount_fs: calloc(sb) failed"); free(fs); return -1; }
 
     inode_t *root = (inode_t*)calloc(1, sizeof *root);
-    if (!root) {
-        DBG("iso_mount_fs: calloc(root) failed");
-        free(sb);
-        free(fs);
-        return -1;
-    }
+    if (!root) { DBG("iso_mount_fs: calloc(root) failed"); free(sb); free(fs); return -1; }
 
     iso_inode_t *rip = (iso_inode_t*)calloc(1, sizeof *rip);
-    if (!rip) {
-        DBG("iso_mount_fs: calloc(rip) failed");
-        free(root);
-        free(sb);
-        free(fs);
-        return -1;
-    }
+    if (!rip) { DBG("iso_mount_fs: calloc(rip) failed"); free(root); free(sb); free(fs); return -1; }
 
     rip->fs          = fs;
     rip->is_dir      = true;
     rip->extent_lba  = fs->iso.root_lba;
     rip->extent_size = fs->iso.root_size;
 
-    root->i_ino     = rip->extent_lba;
+    root->i_ino     = rip->extent_lba; // handy for debugging
     root->i_mode    = VFS_S_IFDIR | VFS_MODE_DIR_0755;
     root->i_sb      = sb;
     root->i_op      = &ISO_IOPS;
@@ -485,19 +394,20 @@ static int iso_mount_fs(vblk_t *dev, const char *opts, superblock_t **out_sb) {
         .kill_sb= iso_kill_sb,
     };
 
-    sb->fs_type    = (struct filesystem_type*)&VFS_ISO9660;
+    sb->fs_type = (struct filesystem_type *)&VFS_ISO9660;
     sb->bdev       = dev;
-    sb->block_size = fs->iso.block_size; /* use what iso_mount read from PVD */
+    sb->block_size = fs->iso.block_size ? fs->iso.block_size : 2048;   // reflect PVD, default 2048
     sb->root       = root;
     sb->s_op       = &SOP;
     sb->fs_private = fs;
-    sb->s_flags   |= VFS_SB_RDONLY;
+    sb->s_flags   |= VFS_SB_RDONLY;  // enforce read-only at VFS layer
 
     DBG("iso9660: mounted (read-only), root=[lba=%u size=%u] bs=%u",
         rip->extent_lba, rip->extent_size, sb->block_size);
 
     *out_sb = sb;
-    DBG("iso_mount_fs: success sb=%p root=%p bs=%u", (void*)sb, (void*)sb->root, sb->block_size);
+    DBG("iso_mount_fs: success sb=%p root=%p bs=%u",
+        (void*)sb, (void*)sb->root, sb->block_size);
     return 0;
 }
 
