@@ -37,10 +37,13 @@ static inline int is_dot_special(const uint8_t *fi, uint8_t fi_len) {
 static inline int to_upper_ascii(int c) {
     return (c >= 'a' && c <= 'z') ? (c - 'a' + 'A') : c;
 }
+
+#ifdef ENABLE_FEATURE
 static void trim_version_semicolon(char *s) {
     char *semi = strrchr(s, ';');
     if (semi) *semi = '\0';
 }
+#endif
 
 /* ============================ On-Disk Structures ============================ */
 
@@ -65,6 +68,7 @@ typedef struct {
 
 /* ============================ Joliet & Names ============================ */
 
+#ifdef ENABLE_FEATURE
 static size_t ucs2be_to_utf8(const uint8_t *in, size_t in_len, char *out, size_t out_cap) {
     size_t oi = 0;
     for (size_t i = 0; i + 1 < in_len; i += 2) {
@@ -87,6 +91,7 @@ static size_t ucs2be_to_utf8(const uint8_t *in, size_t in_len, char *out, size_t
     if (oi < out_cap) out[oi] = '\0';
     return oi;
 }
+#endif
 
 /* ============================ ISO-sector Read Helpers ============================ */
 

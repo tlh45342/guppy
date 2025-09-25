@@ -15,6 +15,8 @@
 #include "debug.h"     // DBG()
 
 extern const filesystem_type_t VFS_ISO9660;
+static const file_ops_t ISO_FILE_FOPS;
+static const file_ops_t FOPS_DIR;
 
 /* ===== Mount state kept in superblock->fs_private ===== */
 typedef struct {
@@ -28,6 +30,42 @@ typedef struct {
     uint32_t  extent_lba;   // start LBA of this inode's data/dir extent
     uint32_t  extent_size;  // size in bytes of this extent
 } iso_inode_t;
+
+/* ---- forward prototypes so initializers see the symbols ---- */
+static int     iso_file_open   (struct inode *inode, struct file **out, int flags, uint32_t mode);
+static int     iso_file_release(struct file *f);
+static ssize_t iso_file_read   (struct file *f, void *buf, size_t n, uint64_t *ppos);
+
+static int     iso_dir_open    (struct inode *inode, struct file **out, int flags, uint32_t mode);
+static ssize_t iso_dir_getdents64(struct file *dirf, void *buf, size_t bytes);
+
+static int     iso_getattr     (struct inode *inode, struct g_stat *st);
+static int     iso_lookup      (struct inode *dir, const char *name, struct inode **out);
+
+/* Directory inode-ops table is defined later; declare it now so iso_lookup can use &ISO_IOPS */
+static const inode_ops_t ISO_IOPS;
+
+static const file_ops_t ISO_FILE_FOPS = {
+    .open       = iso_file_open,
+    .release    = iso_file_release,
+    .read       = iso_file_read,
+    .write      = NULL,
+    .fsync      = NULL,
+    .ioctl      = NULL,
+    .llseek     = NULL,
+    .getdents64 = NULL,
+};
+
+/* File-only i_ops: no .lookup, so the VFS won’t treat it like a directory */
+static const inode_ops_t ISO_FILE_IOPS = {
+    .lookup   = NULL,        // ← important: no lookup on files
+    .mkdir    = NULL, .rmdir = NULL, .unlink = NULL, .rename = NULL,
+    .getattr  = iso_getattr, // already defined in your file; reuse it
+    .setattr  = NULL,
+    .truncate = NULL,
+    .symlink  = NULL,
+    .readlink = NULL,
+};
 
 /* ===== helpers: ASCII name handling for Primary ISO9660 ===== */
 static inline int to_upper_ascii(unsigned char c) {
@@ -102,11 +140,16 @@ static int iso_file_open(struct inode *inode, struct file **out, int flags, uint
     f->f_inode = inode;
     f->f_flags = flags;
     f->f_pos   = 0;
+    f->f_op    = &ISO_FILE_FOPS;   // <-- missing before
+
     *out = f;
     return 0;
 }
 
-static int iso_file_release(struct file *f) { free(f); return 0; }
+static int iso_file_release(struct file *f) {
+	free(f);
+	return 0;
+}
 
 /* Read helper: copy from extent using iso_read_sector() */
 static ssize_t iso_file_read(struct file *f, void *buf, size_t n, uint64_t *ppos) {
@@ -143,17 +186,6 @@ static ssize_t iso_file_read(struct file *f, void *buf, size_t n, uint64_t *ppos
     *ppos = pos;
     return (ssize_t)copied;
 }
-
-static const file_ops_t ISO_FILE_FOPS = {
-    .open       = iso_file_open,
-    .release    = iso_file_release,
-    .read       = iso_file_read,
-    .write      = NULL,
-    .fsync      = NULL,
-    .ioctl      = NULL,
-    .llseek     = NULL,
-    .getdents64 = NULL,
-};
 
 /* ===== directory file_ops ===== */
 static ssize_t iso_dir_getdents64(struct file *dirf, void *buf, size_t bytes) {
@@ -239,6 +271,8 @@ static int iso_dir_open(struct inode *inode, struct file **out, int flags, uint3
     f->f_inode = inode;
     f->f_flags = flags;
     f->f_pos   = 0;
+    f->f_op    = &FOPS_DIR;   // ← this was missing
+
     *out = f;
     return 0;
 }
@@ -279,7 +313,11 @@ static int iso_lookup(struct inode *dir, const char *name, struct inode **out) {
     child->i_mode    = (is_dir ? VFS_S_IFDIR : VFS_S_IFREG) |
                        (is_dir ? VFS_MODE_DIR_0755 : VFS_MODE_FILE_0644);
     child->i_sb      = dir->i_sb;
-    child->i_op      = dir->i_op; // same ops table
+	if (is_dir) {
+		child->i_op = &ISO_IOPS;      // directory i_ops (has .lookup)
+	} else {
+		child->i_op = &ISO_FILE_IOPS; // file i_ops (no .lookup)
+	}
     child->i_private = cip;
 
     if (is_dir) {
