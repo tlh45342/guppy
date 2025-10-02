@@ -20,10 +20,11 @@ iso9660.c
   iso_dir_close
 
 vfs_iso.c
+* DEFINES VFS_ISO9660
 - iso_probe
 - iso_mount_fs
-_ iso_umount_fs
-* DEFINES VFS_ISO9660
+- iso_umount_fs
+- static ssize_t iso_dir_getdents64
 
 src/blkdev.c
   int add_disk(struct gendisk *gd);
