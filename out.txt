@@ -1,0 +1,150 @@
+
+
+ Directory of O:\guppy
+
+10/01/2025  04:14 PM    <DIR>          .
+10/01/2025  04:14 PM    <DIR>          ..
+09/06/2025  02:26 PM                66 .gitattributes
+09/23/2025  07:14 PM             2,309 changelog.md
+08/16/2025  01:50 PM    <DIR>          doc
+09/21/2025  11:48 AM    <DIR>          include
+09/23/2025  03:51 PM             4,268 Makefile
+09/23/2025  07:09 PM             2,550 manifest.md
+09/30/2025  09:22 PM             1,630 manifest.txt
+10/01/2025  04:14 PM                 0 out.txt
+09/23/2025  07:38 PM             4,267 README.md
+09/30/2025  11:03 PM    <DIR>          src
+09/25/2025  05:03 PM    <DIR>          tests
+               7 File(s)         15,090 bytes
+
+ Directory of O:\guppy\doc
+
+08/16/2025  01:50 PM    <DIR>          .
+08/16/2025  01:50 PM    <DIR>          ..
+08/16/2025  01:50 PM             1,735 trailmix.md
+               1 File(s)          1,735 bytes
+
+ Directory of O:\guppy\include
+
+09/21/2025  11:48 AM    <DIR>          .
+09/21/2025  11:48 AM    <DIR>          ..
+09/14/2025  12:36 PM               660 blkdevmap.h
+09/13/2025  11:41 AM               431 blkio.h
+09/23/2025  06:52 PM             1,747 cmds.h
+09/10/2025  08:52 PM               205 cwd.h
+09/21/2025  11:59 AM             1,935 debug.h
+09/13/2025  11:05 AM               920 devmap.h
+09/08/2025  01:56 PM               315 devutil.h
+09/06/2025  05:29 PM               410 disk.h
+09/15/2025  01:37 PM               799 diskio.h
+09/13/2025  10:40 AM             2,825 ext2.h
+09/17/2025  12:07 AM               483 fileutil.h
+09/14/2025  09:33 AM             1,114 fs_format.h
+09/16/2025  11:32 PM               338 fs_probe.h
+09/14/2025  07:05 PM               328 genhd.h
+09/08/2025  03:09 PM             2,193 gpt.h
+09/20/2025  09:27 AM               986 gu_dirent.h
+09/08/2025  11:50 AM             1,075 helper.h
+09/30/2025  08:29 PM             5,052 iso9660.h
+08/16/2025  02:52 PM               876 mbr.h
+09/08/2025  11:44 AM               542 mnttab.h
+08/16/2025  02:06 PM               530 parse.h
+09/08/2025  08:17 AM               810 registry.h
+09/06/2025  03:21 PM               434 use.h
+09/25/2025  11:41 AM             3,950 vblk.h
+09/25/2025  05:06 PM                54 version.h
+09/25/2025  08:54 PM             7,037 vfs.h
+09/20/2025  09:59 AM               609 vfs_core.h
+09/20/2025  09:03 AM             2,869 vfs_stat.h
+09/10/2025  09:19 PM               303 virtio_blk.h
+              29 File(s)         39,830 bytes
+
+ Directory of O:\guppy\src
+
+09/30/2025  11:03 PM    <DIR>          .
+09/30/2025  11:03 PM    <DIR>          ..
+09/30/2025  03:41 PM            16,142 blkdev.c
+09/14/2025  12:37 PM             1,461 blkdevmap.c
+09/13/2025  11:41 AM             5,806 blkio.c
+09/20/2025  09:11 AM             1,178 cmd_cat.c
+09/10/2025  09:41 PM             3,178 cmd_cd.c
+09/20/2025  09:02 AM             3,843 cmd_cp.c
+09/06/2025  03:01 PM             3,447 cmd_create.c
+09/21/2025  11:56 AM             1,991 cmd_debug.c
+09/10/2025  08:33 PM             1,648 cmd_do.c
+09/20/2025  09:23 AM             6,840 cmd_echo.c
+09/10/2025  08:34 PM               197 cmd_exit.c
+08/16/2025  02:09 PM               151 cmd_format.c
+09/16/2025  07:22 PM            26,489 cmd_gpt.c
+09/10/2025  08:34 PM               226 cmd_help.c
+09/23/2025  06:50 PM               937 cmd_lcat.c
+09/23/2025  07:01 PM             3,340 cmd_lls.c
+09/25/2025  08:47 PM             2,544 cmd_ls.c
+08/16/2025  02:10 PM               145 cmd_mbr.c
+09/20/2025  09:35 AM             2,920 cmd_mkdir.c
+09/16/2025  07:44 PM             3,804 cmd_mkfs_ext2.c
+09/14/2025  09:30 AM             1,933 cmd_mkfs_fat.c
+09/14/2025  09:31 AM             3,297 cmd_mkfs_ntfs.c
+09/14/2025  09:31 AM             1,849 cmd_mkfs_vfat.c
+09/23/2025  06:45 PM             4,135 cmd_mount.c
+08/16/2025  02:10 PM               147 cmd_part.c
+09/10/2025  08:42 PM            10,452 cmd_parted.c
+09/14/2025  07:06 PM             3,100 cmd_partscan.c
+09/10/2025  08:55 PM               610 cmd_pwd.c
+09/23/2025  07:02 PM             3,774 cmd_registry.c
+09/25/2025  02:16 PM             2,576 cmd_stat.c
+09/23/2025  04:44 PM             5,633 cmd_use.c
+09/21/2025  11:12 AM               422 cmd_version.c
+09/10/2025  08:53 PM               794 cwd.c
+09/21/2025  11:50 AM               711 debug.c
+09/13/2025  11:29 AM             2,759 devmap.c
+09/08/2025  03:08 PM               780 dev_util.c
+09/15/2025  01:38 PM             3,944 diskio.c
+09/16/2025  09:37 PM            18,376 ext2.c
+09/13/2025  10:41 AM             1,963 ext2_dir.c
+09/20/2025  09:00 PM               881 fat_compat.c
+09/17/2025  12:10 AM             2,867 fileutil.c
+09/20/2025  10:27 AM             1,051 fs_probe.c
+09/20/2025  08:10 AM               767 fs_vfat.c
+09/08/2025  03:10 PM            13,677 gpt.c
+09/08/2025  08:32 AM               965 gpt_get_partition.c
+09/23/2025  07:51 PM             4,833 guppy.c
+09/20/2025  09:45 AM             3,171 gu_dirent.c
+09/08/2025  11:50 AM             3,408 helper.c
+09/30/2025  09:17 PM            13,143 iso9660.c
+09/24/2025  07:20 PM             4,555 iso9660_walk.c
+09/17/2025  12:03 AM             3,319 mbr.c
+09/14/2025  09:43 AM             8,217 mkfs_fat_core.c
+09/14/2025  09:57 AM             9,955 mkfs_ntfs_core.c
+09/08/2025  11:45 AM             1,233 mnttab.c
+09/14/2025  11:14 AM             4,561 parse.c
+09/10/2025  09:07 PM             1,875 repl.c
+09/25/2025  11:39 AM             6,144 vblk.c
+09/25/2025  09:02 PM            18,083 vfs.c
+09/20/2025  10:37 AM            12,718 vfs_ext2.c
+09/21/2025  10:55 AM             2,086 vfs_fat.c
+09/30/2025  11:05 PM            16,203 vfs_iso.c
+09/23/2025  10:26 PM               412 vfs_ntfs.c
+09/23/2025  10:26 PM               472 vfs_vfat.c
+09/16/2025  11:24 PM               977 virtio_blk.c
+              64 File(s)        289,115 bytes
+
+ Directory of O:\guppy\tests
+
+09/25/2025  05:03 PM    <DIR>          .
+09/25/2025  05:03 PM    <DIR>          ..
+09/10/2025  09:34 PM         1,245,184 disc.iso
+08/16/2025  01:19 PM               346 floppy.script
+09/25/2025  05:04 PM        10,485,760 image2.img
+09/10/2025  09:45 PM               334 linux.script
+09/06/2025  04:45 PM                21 Makefile
+09/23/2025  03:13 PM                94 test2.script
+09/16/2025  10:19 PM               312 test3.script
+09/15/2025  08:45 AM                65 test4.script
+09/14/2025  03:40 PM                42 test5.script
+09/29/2025  02:41 PM               100 test6.script
+              10 File(s)     11,732,258 bytes
+
+     Total Files Listed:
+             549 File(s)     13,008,481 bytes
+             689 Dir(s)   1,803,120,640 bytes free

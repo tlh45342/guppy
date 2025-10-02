@@ -1,0 +1,5 @@
+use -i disc.iso /dev/b
+use
+mount /dev/b /
+ls -la
+

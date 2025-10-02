@@ -3,3 +3,4 @@ use -i image2.img /dev/a
 mount /dev/a1 /
 ls
 cat hello.txt
+echo "hello" > out.txt

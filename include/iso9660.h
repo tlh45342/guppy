@@ -3,6 +3,7 @@
 #pragma once
 #include <stdint.h>
 #include <stdbool.h>
+#include <time.h>
 
 #ifndef ISO_SECTOR_SIZE
 #define ISO_SECTOR_SIZE 2048u
@@ -39,6 +40,17 @@ typedef struct iso9660 {
     uint32_t  root_lba;   /* root directory extent LBA */
     uint32_t  root_size;  /* root directory extent size in bytes */
 } iso9660_t;
+
+typedef struct {
+    vblk_t     *dev;
+    uint32_t    extent_lba;     // start LBA of this dir's data
+    uint32_t    data_len;       // directory byte length
+    uint32_t    pos;            // current offset within dir (0..data_len)
+    uint32_t    blksz;          // logical block size (e.g., 2048)
+    uint8_t     sec[4096];      // scratch >= max blksz
+    uint32_t    sec_lba;        // LBA of buffered sector, or UINT32_MAX if none
+} iso_dir_it;
+
 
 /* API */
 bool iso_mount(vblk_t *dev, iso9660_t *out);
@@ -94,7 +106,24 @@ bool iso_stat_path(iso9660_t *iso, const char *path,
 // Really in iso9660_walk.c but who's counting?
 
 int  iso_walk_component(const iso9660_t *iso,
-                        uint32_t dir_lba, uint32_t dir_size,
+                        uint32_t dir_lba,
+						uint32_t dir_size,
                         const char *want,
-                        uint32_t *out_lba, uint32_t *out_size,
-                        uint8_t  *out_flags);
+                        uint32_t *out_lba,
+						uint32_t *out_size,
+                        uint8_t  *out_flags,
+						time_t *out_mtime);
+
+struct file;      // from vfs.h
+
+// Minimal directory payload carried in inode->i_private for ISO dirs.
+// If you already have a payload type with these fields, you can reuse it.
+typedef struct {
+    uint32_t lba;    // start LBA of the directory extent (2048-byte sectors)
+    uint32_t size;   // directory size in bytes
+    uint8_t  flags;  // ISO file flags (optional; 0x02 = DIR)
+} iso_dir_payload_t;
+
+// getdents64 implementation for ISO9660 directories
+// Returns: number of bytes written to 'buf', 0 on EOF, or -errno on error.
+ssize_t iso_getdents64(struct file *dirf, void *buf, size_t cap);

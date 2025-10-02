@@ -1,8 +1,0 @@
-debug all on
-use -i disc.iso /dev/b
-use
-mount /dev/b /
-mount
-pwd
-ls -la
-cat hello.txt

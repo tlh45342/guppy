@@ -283,9 +283,12 @@ static int register_child(const vblk_t *parent, const char *parent_name,
     int idx = vblk_register(&child);
     if (idx < 0) { fprintf(stderr, "partscan: registry full when adding %s\n", child.name); return -1; }
 
-    printf("%-8s start=%" PRIu64 " end=%" PRIu64 " size=%.2fMB\n",
-           child.name, first_lba, last_lba,
-           (double)child.lba_size * (double)LSEC / 1024.0 / 1024.0);
+	DBG("%-8s start=%" PRIu64 " end=%" PRIu64 " size=%.2fMB",
+		child.name,
+		first_lba,
+		last_lba,
+		(double)child.lba_size * (double)LSEC / (1024.0 * 1024.0));
+		
     return 0;
 }
 
@@ -326,7 +329,7 @@ int disk_scan_partitions(struct gendisk *gd) {
         }
         sort_pairs(first, last, g);
         int made=0; for (int i=0;i<g;i++) if (register_child(pconst, gd->name, i+1, first[i], last[i], "gpt")==0) made++;
-        printf("partscan: registered %d GPT partition(s) on %s\n", made, gd->name);
+        DBG("partscan: registered %d GPT partition(s) on %s\n", made, gd->name);
         DBG("disk_scan_partitions: returning 0 (GPT via protective MBR)");
         return 0;
     }

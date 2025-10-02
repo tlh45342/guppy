@@ -6,6 +6,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
+#include <time.h>
 
 #include "iso9660.h"  // public API
 #include "vblk.h"     // vblk_t, vblk_read_blocks
@@ -257,7 +258,7 @@ bool iso_read_file_by_path(iso9660_t *iso,
 		uint8_t  flags    = 0;
 
 		int found = iso_walk_component(iso, dir_lba, dir_sz, last,
-									   &file_lba, &file_sz, &flags);
+									   &file_lba, &file_sz, &flags, NULL);
 		if (found != 1) return false;          // 1=found, 0=not found, -1=error
 		if (flags & 0x02) {                    // directory bit -> not a regular file
 			// optional: only if your callers check errno
@@ -271,7 +272,7 @@ bool iso_read_file_by_path(iso9660_t *iso,
 	uint8_t  flags    = 0;
 
 	int found = iso_walk_component(iso, dir_lba, dir_sz, last,
-								   &file_lba, &file_sz, &flags);
+								   &file_lba, &file_sz, &flags, NULL);
 	if (found != 1) return false;          // 1=found, 0=not found, -1=error
 	if (flags & 0x02) {                    // directory bit -> not a regular file
 		// optional: only if your callers check errno
@@ -328,7 +329,7 @@ bool iso_stat_path(iso9660_t *iso, const char *path,
 	uint8_t  flags = 0;
 
 	int found = iso_walk_component(iso, dir_lba, dir_sz, last,
-								   &lba, &size, &flags);
+								   &lba, &size, &flags, NULL);
 	if (found != 1) return false;
 
 	*out_lba    = lba;
@@ -372,7 +373,8 @@ bool iso_lookup_dir(iso9660_t *iso,
 
         // Look up the next component inside the current directory
         uint32_t child_lba = 0, child_size = 0; uint8_t flags = 0;
-        int found = iso_walk_component(iso, cur_lba, cur_size, comp, &child_lba, &child_size, &flags);
+		time_t mtime = 0;
+        int found = iso_walk_component(iso, cur_lba, cur_size, comp, &child_lba, &child_size, &flags, &mtime);
         if (found != 1) return false;          // not found or error
         if (!(flags & 0x02)) return false;     // must be a directory
 

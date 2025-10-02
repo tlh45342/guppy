@@ -39,6 +39,21 @@ static int names_equal_ci(const char *a, const char *b) {
     return *a == '\0' && *b == '\0';
 }
 
+static time_t iso_recdate_to_time(const uint8_t rec[7]) {
+    struct tm t;
+    t.tm_year = rec[0];          // years since 1900
+    t.tm_mon  = (rec[1] ? rec[1] - 1 : 0); // 1..12 -> 0..11
+    t.tm_mday = rec[2];
+    t.tm_hour = rec[3];
+    t.tm_min  = rec[4];
+    t.tm_sec  = rec[5];
+    t.tm_isdst = -1;
+
+    /* Treat fields as local time; ignore tz byte for now (rec[6]).
+       We can refine with a true UTC conversion later if needed. */
+    return mktime(&t);
+}
+
 /**
  * Scan a single ISO9660 directory (at dir_lba, length dir_size bytes) for one component name.
  * If found, outputs the child's extent LBA/size/flags and returns 1.
@@ -50,7 +65,8 @@ int iso_walk_component(const iso9660_t  *iso,
                           const char *want,
                           uint32_t *out_lba,
                           uint32_t *out_size,
-                          uint8_t  *out_flags)
+                          uint8_t  *out_flags,
+						  time_t *out_mtime)
 {
     if (!iso || !iso->dev || !want) return -1;
 
@@ -109,6 +125,7 @@ int iso_walk_component(const iso9660_t  *iso,
                 if (out_lba)   *out_lba   = child_lba;
                 if (out_size)  *out_size  = child_size;
                 if (out_flags) *out_flags = flags;
+				if (out_mtime) *out_mtime = iso_recdate_to_time(rec + 18); 
                 return 1; // found
             }
 

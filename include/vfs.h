@@ -203,6 +203,7 @@ ssize_t vfs_read(struct file *f, void *buf, size_t n);
 ssize_t vfs_write(struct file *f, const void *buf, size_t n);
 int     vfs_mkdir(const char *path, unsigned mode);
 int     vfs_readlink(const char *path, char *buf, size_t bufsz);
+ssize_t vfs_getdents64(struct file *f, void *buf, size_t bytes);
 
 /* ===== Metadata ===== */
 int     vfs_stat(const char *path, struct g_stat *st);

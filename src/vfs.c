@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <errno.h>
 
 #include "debug.h"
 #include "vfs.h"
@@ -532,3 +533,15 @@ int vfs_readlink(const char *path, char *buf, size_t bufsz) {
     if ((size_t)n < bufsz) buf[n] = '\0';  /* convenience for callers */
     return n;
 }
+
+ssize_t vfs_getdents64(struct file *f, void *buf, size_t bytes) {
+    if (!f || !f->f_op || !f->f_op->getdents64) return -ENOTDIR;
+    DBG("vfs:getdents64 enter pos=%llu cap=%zu",
+        (unsigned long long)f->f_pos, bytes);
+    ssize_t n = f->f_op->getdents64(f, buf, bytes);
+    DBG("vfs:getdents64 -> n=%zd newpos=%llu",
+        n, (unsigned long long)f->f_pos);
+    return n;
+}
+
+

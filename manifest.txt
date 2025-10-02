@@ -1,5 +1,9 @@
-
-
+iso9660_readdir.c
+  iso_getdents64
+  iso_pread_sector 
+  iso_dir_fill
+  iso_dir_open
+  iso_dir_read
 
 iso9660.c
 - iso_dirrec_fits
@@ -13,6 +17,7 @@ iso9660.c
 - iso_list_dir
 - iso_read_file_by_path
 - iso_stat_path
+  iso_dir_close
 
 vfs_iso.c
 - iso_probe
