@@ -15,11 +15,30 @@
 #endif
 
 static void print_usage(void) {
-    puts("usage: ls [-l] [-a] [path]");
+    puts("usage: ls [-l] [-a] [-h] [path]");
+}
+
+static void fmt_size(uint64_t size, int human, char *out, size_t cap) {
+    static const char units[] = "BKMGTPE";
+    double v = (double)size;
+    unsigned u = 0;
+
+    if (!human) {
+        snprintf(out, cap, "%llu", (unsigned long long)size);
+        return;
+    }
+
+    while (v >= 1024.0 && u + 1 < sizeof(units) - 1) {
+        v /= 1024.0;
+        ++u;
+    }
+
+    if (u == 0) snprintf(out, cap, "%llu", (unsigned long long)size);
+    else if (v >= 10.0) snprintf(out, cap, "%.0f%c", v, units[u]);
+    else snprintf(out, cap, "%.1f%c", v, units[u]);
 }
 
 // Turn st_mode into "drwxr-xr-x" style.
-// Uses VFS_S_ISDIR for the file type; rwx bits use POSIX-style masks.
 static void fmt_mode(uint32_t mode, char out[11]) {
     out[0] = VFS_S_ISDIR(mode) ? 'd' : '-';
     out[1] = (mode & 0400) ? 'r' : '-';
@@ -36,7 +55,7 @@ static void fmt_mode(uint32_t mode, char out[11]) {
 
 int cmd_ls(int argc, char **argv)
 {
-    int show_all = 0, longfmt = 0;
+    int show_all = 0, longfmt = 0, human = 0;
     const char *path = ".";
 
     for (int i = 1; i < argc; ++i) {
@@ -45,6 +64,7 @@ int cmd_ls(int argc, char **argv)
             for (const char *p = arg + 1; *p; ++p) {
                 if (*p == 'a') show_all = 1;
                 else if (*p == 'l') longfmt = 1;
+                else if (*p == 'h') human = 1;
                 else { print_usage(); return 1; }
             }
         } else {
@@ -52,14 +72,12 @@ int cmd_ls(int argc, char **argv)
         }
     }
 
-    // Open the target path (directory)
     struct file *df = NULL;
     if (vfs_open(path, 0, 0, &df) != 0) {
         fprintf(stderr, "ls: cannot open '%s'\n", path);
         return 1;
     }
 
-    // Iterate directory entries using getdents64
     uint8_t buf[4096];
 
     for (;;) {
@@ -69,14 +87,13 @@ int cmd_ls(int argc, char **argv)
             fprintf(stderr, "ls: read error on '%s'\n", path);
             return 1;
         }
-        if (n == 0) break; // EOF
+        if (n == 0) break;
 
         size_t off = 0;
         while (off < (size_t)n) {
             vfs_dirent64_t *de = (vfs_dirent64_t *)(buf + off);
             const char *name = de->d_name;
 
-            // skip dot entries unless -a
             if (!show_all && (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)) {
                 off += de->d_reclen;
                 continue;
@@ -85,35 +102,34 @@ int cmd_ls(int argc, char **argv)
             if (!longfmt) {
                 puts(name);
             } else {
-                // long listing: perms, nlink, owner, group, size, name
                 char full[PATH_MAX];
                 if (strcmp(path, ".") == 0) snprintf(full, sizeof full, "%s", name);
-                else                         snprintf(full, sizeof full, "%s/%s", path, name);
+                else if (strcmp(path, "/") == 0) snprintf(full, sizeof full, "/%s", name);
+                else snprintf(full, sizeof full, "%s/%s", path, name);
 
                 struct g_stat st;
                 if (vfs_stat(full, &st) == 0) {
                     char modebuf[11];
-                    fmt_mode(st.st_mode, modebuf);
-
-                    // placeholders for owner/group (we'll wire real values later)
+                    char sizebuf[32];
+                    char when[20];
                     const char *owner = "-";
                     const char *group = "-";
-					char when[20];
-					    struct tm *tm = localtime(&st.st_mtime);
-					    if (tm) strftime(when, sizeof when, "%Y-%m-%d %H:%M", tm);
-					    else    strcpy(when, "-");
-					
-					    printf("%s %2u %8s %8s %10llu %s %s\n",
-					           modebuf, 1u, owner, group,
-					           (unsigned long long)st.st_size,
-					           when,
-					           name);
+                    struct tm *tm;
+
+                    fmt_mode(st.st_mode, modebuf);
+                    fmt_size(st.st_size, human, sizebuf, sizeof sizebuf);
+
+                    tm = localtime(&st.st_mtime);
+                    if (tm) strftime(when, sizeof when, "%Y-%m-%d %H:%M", tm);
+                    else strcpy(when, "-");
+
+                    printf("%s %2u %8s %8s %10s %s %s\n",
+                           modebuf, 1u, owner, group,
+                           sizebuf, when, name);
                 } else {
-                    // stat failed: use dirent type as fallback for leading char
                     char t = (de->d_type == VFS_DT_DIR) ? 'd'
                            : (de->d_type == VFS_DT_REG) ? '-'
                            : '?';
-                    // perms unknown → "---------" placeholder
                     printf("%c%9s %2u %8s %8s %10s %s\n",
                            t, "---------", 1u, "-", "-", "-", name);
                 }

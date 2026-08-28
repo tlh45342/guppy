@@ -1,6 +1,6 @@
 # tests/test3.script
 debug all on
-create image2.img --size 10MiB
+create image2.img --size 5MiB
 use -i image2.img /dev/a
 use
 gpt init /dev/a

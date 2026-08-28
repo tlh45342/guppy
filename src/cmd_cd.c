@@ -1,5 +1,7 @@
 #include "cmds.h"
 #include "cwd.h"
+#include "vfs.h"
+#include "vfs_stat.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
@@ -76,31 +78,45 @@ static int join_normalize(const char *base, const char *rel, char out[], size_t 
 }
 
 int cmd_cd(int argc, char **argv) {
-    static char prev[CD_BUF] = "/";  // previous directory (for "cd -")
+    static char prev[CD_BUF] = "/";
     const char *arg = (argc >= 2) ? argv[1] : "/";
 
     char current[CD_BUF];
-    snprintf(current, sizeof(current), "%s", cwd_get() ? cwd_get() : "/");
-
     char target[CD_BUF];
 
+    snprintf(current, sizeof(current), "%s", cwd_get() ? cwd_get() : "/");
+
     if (strcmp(arg, "-") == 0) {
-        // swap to previous
-        char tmp[CD_BUF];
-        snprintf(tmp, sizeof(tmp), "%s", prev);
-        snprintf(prev, sizeof(prev), "%s", current);
-        snprintf(target, sizeof(target), "%s", tmp);
+        snprintf(target, sizeof(target), "%s", prev);
     } else {
-        // normal path resolution
         if (!join_normalize(current, arg, target, sizeof(target))) {
             fprintf(stderr, "cd: path too long or invalid\n");
             return 1;
         }
-        // update prev
-        snprintf(prev, sizeof(prev), "%s", current);
     }
 
-    cwd_set(target);
+    /* Do not let cwd become a string that does not name a real VFS directory. */
+    struct g_stat st;
+    if (vfs_stat(target, &st) != 0) {
+        fprintf(stderr, "cd: no such directory: %s\n", target);
+        return 1;
+    }
+    if (!VFS_S_ISDIR(st.st_mode)) {
+        fprintf(stderr, "cd: not a directory: %s\n", target);
+        return 1;
+    }
+
+    /* Only update previous-directory state after validation succeeds. */
+    if (strcmp(arg, "-") == 0) {
+        char tmp[CD_BUF];
+        snprintf(tmp, sizeof(tmp), "%s", current);
+        cwd_set(target);
+        snprintf(prev, sizeof(prev), "%s", tmp);
+    } else {
+        snprintf(prev, sizeof(prev), "%s", current);
+        cwd_set(target);
+    }
+
     printf("%s\n", cwd_get());
     return 0;
 }

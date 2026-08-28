@@ -16,7 +16,9 @@ int   is_blank_or_comment(const char *s); // treats leading ; or # as comment
 int   split_argv(char *line, char **argv, int maxv);
 
 // Size parsing & formatting
-// Accepts: bytes (plain number), B, KiB, MiB, GiB (binary powers)
+// Human-readable byte sizes:
+//   K/M/G and KiB/MiB/GiB are binary powers; KB/MB/GB are decimal.
+//   Plain numbers (or B) are bytes.
 uint64_t parse_size(const char *s, int *ok);
 double   bytes_to_mib(uint64_t b);
 

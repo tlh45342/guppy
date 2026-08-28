@@ -1,5 +1,14 @@
+# -----------------------------------------------------------------------------
+# Makefile - guppy
+#
+# Goals:
+#  - Works on POSIX (Linux/macOS) and Windows (when GNU make uses sh.exe)
+#  - No /dev/null on Windows (use NUL)
+#  - Defaults to gcc on Windows (cc often missing)
+#  - "make clean" should not print the Windows "path not found" noise
+# -----------------------------------------------------------------------------
+
 # ---- configurable ------------------------------------------------------------
-CC       ?= cc
 CSTD     ?= -std=c11
 WARN     ?= -Wall -Wextra
 OPT      ?= -O2
@@ -7,55 +16,71 @@ CPPFLAGS ?= -Iinclude -Isrc
 LDFLAGS  ?=
 LDLIBS   ?=
 
-# Install prefix (override with: make install PREFIX=/opt)
-PREFIX   ?= /usr/local
-BINDIR   ?= $(PREFIX)/bin
-DESTDIR  ?=
 
-# Optional override: install directly to a specific directory
-# e.g. make install INSTALL_DIR=/cygdrive/c/cygwin64/bin
+# MinGW: enable C99 printf formats like %zu / %zd (fixes DBG format warnings)
+ifeq ($(OS),Windows_NT)
+  CPPFLAGS += -D__USE_MINGW_ANSI_STDIO=1
+endif
+
+
+# Tools (assumes sh.exe + coreutils-ish environment on Windows)
+ifeq ($(OS),Windows_NT)
+  MKDIR_P := mkdir
+else
+  MKDIR_P := mkdir -p
+endif
+RM_RF    ?= rm -rf
+RM_F     ?= rm -f
+CP       ?= cp -f
+STRIP    ?= strip
+
+# ---- platform detect ---------------------------------------------------------
+IS_WINDOWS := 0
+EXE :=
+NULLDEV := /dev/null
+
+ifeq ($(OS),Windows_NT)
+  IS_WINDOWS := 1
+  EXE := .exe
+  NULLDEV := NUL
+  # Windows: default to gcc (user can override on command line)
+  CC := gcc
+else
+  # Non-Windows: default to cc
+  CC := cc
+endif
+
+# Install prefix (override: make PREFIX="C:/Something" install)
+ifeq ($(OS),Windows_NT)
+  PREFIX ?= $(USERPROFILE)/.local
+else
+  PREFIX ?= /usr/local
+endif
+
+BINDIR  ?= $(PREFIX)/bin
+DESTDIR ?=
+
+# Optional override if you want install somewhere else directly
+# e.g. make install INSTALL_DIR=/c/Users/You/bin
 INSTALL_DIR ?= $(BINDIR)
 
-# Tools
-INSTALL      ?= install
-INSTALL_BIN  ?= $(INSTALL) -m 0755
-MKDIR_P      ?= mkdir -p
-STRIP        ?= strip
+# Only do uname-based tweaks when NOT native Windows.
+# (Important: GNU make parses the whole file even for "make clean",
+#  so don't run uname with /dev/null during parse on Windows.)
+ifneq ($(IS_WINDOWS),1)
+  UNAME_S := $(shell uname -s 2>$(NULLDEV) || echo Unknown)
 
-CPPFLAGS += -DDEBUG
-
-# ---- detect OS & set platform flags -----------------------------------------
-UNAME_S := $(shell uname -s 2>/dev/null || echo Unknown)
-EXE :=
-
-ifeq ($(UNAME_S),Linux)
-  CPPFLAGS += -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE
-endif
-
-ifeq ($(UNAME_S),Darwin)  # macOS
-  CPPFLAGS += -D_DARWIN_C_SOURCE -D_FILE_OFFSET_BITS=64
-endif
-
-# Windows user (fallback if USERNAME is unset)
-WINUSER := $(or $(USERNAME),$(USER))
-
-# Cygwin
-ifneq (,$(findstring CYGWIN,$(UNAME_S)))
-  EXE := .exe
-  CPPFLAGS += -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE
-  # Default to global Cygwin bin unless user already set INSTALL_DIR on CLI
-  ifneq ($(origin INSTALL_DIR), command line)
-    INSTALL_DIR := /cygdrive/c/cygwin64/bin
+  ifeq ($(UNAME_S),Linux)
+    CPPFLAGS += -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE
   endif
-endif
 
-# MinGW / MSYS
-ifneq (,$(findstring MINGW,$(UNAME_S)))
-  EXE := .exe
-  CPPFLAGS += -D_FILE_OFFSET_BITS=64 -D__USE_MINGW_ANSI_STDIO=1
-  # Sensible default for MinGW (user bin); override as needed
-  ifneq ($(origin INSTALL_DIR), command line)
-    INSTALL_DIR := /c/Users/$(WINUSER)/bin
+  ifeq ($(UNAME_S),Darwin)
+    CPPFLAGS += -D_DARWIN_C_SOURCE -D_FILE_OFFSET_BITS=64
+  endif
+
+  # Optional: MinGW ANSI stdio formatting
+  ifneq (,$(findstring MINGW,$(UNAME_S)))
+    CPPFLAGS += -D__USE_MINGW_ANSI_STDIO=1
   endif
 endif
 
@@ -64,78 +89,78 @@ SRC_DIR   := src
 INC_DIR   := include
 BUILD_DIR := build
 BIN_DIR   := bin
-BIN       := $(BIN_DIR)/guppy$(EXE)
 
-# All C files in src/
-SRCS   := $(wildcard $(SRC_DIR)/*.c)
-OBJS   := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS))
-DEPS   := $(OBJS:.o=.d)
+BIN := $(BIN_DIR)/guppy$(EXE)
+
+SRCS := $(wildcard $(SRC_DIR)/*.c)
+OBJS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS))
+DEPS := $(OBJS:.o=.d)
 
 # ---- rules -------------------------------------------------------------------
-.PHONY: all clean distclean run print-config install install-strip uninstall
+.PHONY: all clean distclean run print-config print-shell install uninstall
 
 all: $(BIN)
 
-# Final link
+# Link
 $(BIN): $(OBJS) | $(BIN_DIR)
 	$(CC) $(OBJS) $(LDFLAGS) $(LDLIBS) -o $@
 
-# Compile each .c -> build/.o with dep files
+# Compile (with depfiles)
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR) $(INC_DIR)/version.h
 	$(CC) $(CSTD) $(WARN) $(OPT) $(CPPFLAGS) -MMD -MP -c $< -o $@
 
-# Auto-generate a simple version header (from git describe, or fallback)
-$(INC_DIR)/version.h:
-	@mkdir -p $(INC_DIR)
-	@echo '/* auto-generated; do not edit */' > $(INC_DIR)/version.h
-	@echo '#pragma once' >> $(INC_DIR)/version.h
-	@echo -n '#define GUPPY_VERSION "' >> $(INC_DIR)/version.h
-	@{ git describe --tags --always --dirty 2>/dev/null || echo 0.0.0; } >> $(INC_DIR)/version.h
-	@echo '"' >> $(INC_DIR)/version.h
-
-# Create build/bin directories if missing
+# Dirs
 $(BUILD_DIR):
-	@mkdir -p $(BUILD_DIR)
+	@$(MKDIR_P) "$(BUILD_DIR)"
 
 $(BIN_DIR):
-	@mkdir -p $(BIN_DIR)
+	@$(MKDIR_P) "$(BIN_DIR)"
 
-# Convenience: run the REPL
+# Convenience run
 run: $(BIN)
 	@$(BIN)
 
-# Show current config
+# Show current config (your pattern, adapted to this project)
 print-config:
-	@echo "UNAME_S=$(UNAME_S)  EXE=$(EXE)"
-	@echo "PREFIX=$(PREFIX)"
-	@echo "BINDIR=$(BINDIR)"
-	@echo "INSTALL_DIR=$(INSTALL_DIR)"
-	@echo "BIN=$(BIN)"
-	@echo "SRCS ($(words $(SRCS)) files)"
-	@echo "OBJS ($(words $(OBJS)) files)"
+ifeq ($(IS_WINDOWS),1)
+	@echo IS_WINDOWS=$(IS_WINDOWS)  EXE=$(EXE)  NULLDEV=$(NULLDEV)
+else
+	@echo UNAME_S=$(UNAME_S)  EXE=$(EXE)  NULLDEV=$(NULLDEV)
+endif
+	@echo CC=$(CC)
+	@echo PREFIX=$(PREFIX)
+	@echo BINDIR=$(BINDIR)
+	@echo INSTALL_DIR=$(INSTALL_DIR)
+	@echo DESTDIR=$(DESTDIR)
+	@echo BIN=$(BIN)
+	@echo SRCS ($(words $(SRCS)) files)
+	@echo OBJS ($(words $(OBJS)) files)
+	@echo SHELL=$(SHELL)
 
-# Install / Uninstall ----------------------------------------------------------
-# Use DESTDIR for packaging (e.g., DESTDIR=$(PWD)/pkgroot make install)
-install: $(BIN)
-	$(MKDIR_P) "$(DESTDIR)$(INSTALL_DIR)"
-	$(INSTALL_BIN) "$(BIN)" "$(DESTDIR)$(INSTALL_DIR)/"
+# Handy environment peek
+print-shell:
+	@echo OS=$(OS)
+	@echo ComSpec=$(ComSpec)
+	@echo COMSPEC=$(COMSPEC)
+	@echo SHELL=$(SHELL)
+	@echo IS_WINDOWS=$(IS_WINDOWS)
+	@echo NULLDEV=$(NULLDEV)
+	@echo CC=$(CC)
 
-install-strip: install
-	-$(STRIP) "$(DESTDIR)$(INSTALL_DIR)/guppy$(EXE)" || true
+# --- install ---
+install: all
+	@if not exist "$(BINDIR)" mkdir "$(BINDIR)"
+	@copy /Y "$(BIN_DIR)\guppy$(EXE)" "$(BINDIR)\guppy$(EXE)" >NUL
+	@echo Installed guppy to $(BINDIR)
 
 uninstall:
 	@echo "Removing $(DESTDIR)$(INSTALL_DIR)/guppy$(EXE)"
-	@rm -f "$(DESTDIR)$(INSTALL_DIR)/guppy$(EXE)"
+	-@$(RM_F) "$(DESTDIR)$(INSTALL_DIR)/guppy$(EXE)"
 
 # Clean ------------------------------------------------------------------------
 clean:
-	@rm -f $(BUILD_DIR)/*.o $(BUILD_DIR)/*.d $(BIN)
-	@rmdir $(BUILD_DIR) 2>/dev/null || true
-	@rmdir $(BIN_DIR) 2>/dev/null || true
+	@echo Cleaning build artifacts
+	-@$(RM_RF) "$(BUILD_DIR)" "$(BIN_DIR)"
 
-# Distclean also removes generated version header
-distclean: clean
-	@rm -f $(INC_DIR)/version.h
-
-# Include auto-generated dependency files
+# Include depfiles (safe if missing)
 -include $(DEPS)

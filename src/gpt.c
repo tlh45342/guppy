@@ -73,6 +73,10 @@ const char *gpt_alias_for_type(const uint8_t type_guid[16]) {
     static const uint8_t LINUXFS[16] = {
         0xAF,0x3D,0xC6,0x0F, 0x83,0x84, 0x72,0x47, 0x8E,0x79, 0x3D,0x69,0xD8,0x47,0x7D,0xE4
     };
+    // BIOS Boot Partition: 21686148-6449-6E6F-744E-656564454649
+    static const uint8_t BIOSBOOT[16] = {
+        0x48,0x61,0x68,0x21, 0x49,0x64, 0x6F,0x6E, 0x74,0x4E, 0x65,0x65,0x64,0x45,0x46,0x49
+    };
     // EFI System Partition: C12A7328-F81F-11D2-BA4B-00A0C93EC93B
     static const uint8_t EFI[16] = {
         0x28,0x73,0x2A,0xC1, 0x1F,0xF8, 0xD2,0x11, 0xBA,0x4B, 0x00,0xA0,0xC9,0x3E,0xC9,0x3B
@@ -87,6 +91,7 @@ const char *gpt_alias_for_type(const uint8_t type_guid[16]) {
     };
 
     if (memcmp(type_guid, LINUXFS,   16) == 0) return "linuxfs";
+    if (memcmp(type_guid, BIOSBOOT,  16) == 0) return "biosboot";
     if (memcmp(type_guid, EFI,       16) == 0) return "efi";
     if (memcmp(type_guid, MS_BASIC,  16) == 0) return "msbasic";
     if (memcmp(type_guid, LINUXSWAP, 16) == 0) return "linuxswap";

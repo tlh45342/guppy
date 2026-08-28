@@ -223,6 +223,35 @@ bool iso_mount(vblk_t *dev, iso9660_t *out)
     out->root_lba   = root_lba;
     out->root_size  = root_size;
     out->block_size = ISO_SECTOR_SIZE;
+    out->susp_enabled = 0;
+    out->susp_skip = 0;
+
+    /* SUSP is announced by an SP entry in the System Use Area of the
+       root directory's "." record.  Detect it once at mount time; individual
+       directory records can then cheaply look for Rock Ridge NM entries. */
+    {
+        uint8_t root_sec[ISO_SECTOR_SIZE];
+        if (iso_read_sector(out, root_lba, root_sec)) {
+            const uint8_t rlen = root_sec[0];
+            if (rlen >= 34u && root_sec[32] == 1u && root_sec[33] == 0u) {
+                size_t su = 33u + 1u; /* id_len=1 -> no ISO padding byte */
+                while (su + 4u <= rlen) {
+                    const uint8_t *e = root_sec + su;
+                    uint8_t elen = e[2];
+                    if (elen < 4u || su + elen > rlen) break;
+                    if (e[0] == 'S' && e[1] == 'P' && elen >= 7u &&
+                        e[3] == 1u && e[4] == 0xBEu && e[5] == 0xEFu) {
+                        out->susp_enabled = 1;
+                        out->susp_skip = e[6];
+                        DBG("iso_mount: SUSP detected (skip=%u)",
+                            (unsigned)out->susp_skip);
+                        break;
+                    }
+                    su += elen;
+                }
+            }
+        }
+    }
 
     // Log in the same style you were already using
     DBG("mount: Primary, root=[lba=%u size=%u] bs=%u", out->root_lba, out->root_size, out->block_size);
@@ -258,7 +287,7 @@ bool iso_read_file_by_path(iso9660_t *iso,
 		uint8_t  flags    = 0;
 
 		int found = iso_walk_component(iso, dir_lba, dir_sz, last,
-									   &file_lba, &file_sz, &flags, NULL);
+									   &file_lba, &file_sz, &flags, NULL, NULL, NULL, NULL, 0);
 		if (found != 1) return false;          // 1=found, 0=not found, -1=error
 		if (flags & 0x02) {                    // directory bit -> not a regular file
 			// optional: only if your callers check errno
@@ -272,7 +301,7 @@ bool iso_read_file_by_path(iso9660_t *iso,
 	uint8_t  flags    = 0;
 
 	int found = iso_walk_component(iso, dir_lba, dir_sz, last,
-								   &file_lba, &file_sz, &flags, NULL);
+								   &file_lba, &file_sz, &flags, NULL, NULL, NULL, NULL, 0);
 	if (found != 1) return false;          // 1=found, 0=not found, -1=error
 	if (flags & 0x02) {                    // directory bit -> not a regular file
 		// optional: only if your callers check errno
@@ -329,7 +358,7 @@ bool iso_stat_path(iso9660_t *iso, const char *path,
 	uint8_t  flags = 0;
 
 	int found = iso_walk_component(iso, dir_lba, dir_sz, last,
-								   &lba, &size, &flags, NULL);
+								   &lba, &size, &flags, NULL, NULL, NULL, NULL, 0);
 	if (found != 1) return false;
 
 	*out_lba    = lba;
@@ -374,7 +403,7 @@ bool iso_lookup_dir(iso9660_t *iso,
         // Look up the next component inside the current directory
         uint32_t child_lba = 0, child_size = 0; uint8_t flags = 0;
 		time_t mtime = 0;
-        int found = iso_walk_component(iso, cur_lba, cur_size, comp, &child_lba, &child_size, &flags, &mtime);
+        int found = iso_walk_component(iso, cur_lba, cur_size, comp, &child_lba, &child_size, &flags, &mtime, NULL, NULL, NULL, 0);
         if (found != 1) return false;          // not found or error
         if (!(flags & 0x02)) return false;     // must be a directory
 

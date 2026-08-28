@@ -1,87 +1,89 @@
-// local "stat" shim: show basic info about a host file
+// src/cmd_stat.c — VFS-backed "stat" command
+// usage: stat <path>
+//
+// IMPORTANT:
+//   This command reports metadata for Guppy's mounted VFS namespace.
+//   Host/local filesystem metadata belongs in local-side commands (lls, etc.).
+
+#include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
 #include <time.h>
-#include <inttypes.h>
-#include <limits.h>  // probably should be virtual but it would equal the same?
-
-#ifndef _XOPEN_SOURCE
-#define _XOPEN_SOURCE 700   // expose readlink() on POSIX libc (glibc/musl/cygwin)
-#endif
-#include <unistd.h>         // declares readlink()
-
-#include "debug.h"
-#ifndef DBG
-#define DBG(...) do{}while(0)
-#endif
-
-static void usage(void) {
-    printf("usage: stat <path>\n");
-}
 
 #include "vfs.h"
+#include "vfs_stat.h"
 
-static const char* type_str(mode_t m) {
-    if (S_ISREG(m))  return "regular file";
-    if (S_ISDIR(m))  return "directory";
-    if (S_ISLNK(m))  return "symlink";
-    if (S_ISCHR(m))  return "char device";
-    if (S_ISBLK(m))  return "block device";
-    if (S_ISFIFO(m)) return "fifo";
-    if (S_ISSOCK(m)) return "socket";
+static const char *type_str(uint32_t mode)
+{
+    if (VFS_S_ISREG(mode)) return "file";
+    if (VFS_S_ISDIR(mode)) return "dir";
+#ifdef VFS_S_ISCHR
+    if (VFS_S_ISCHR(mode)) return "char";
+#endif
+#ifdef VFS_S_ISBLK
+    if (VFS_S_ISBLK(mode)) return "block";
+#endif
+#ifdef VFS_S_ISFIFO
+    if (VFS_S_ISFIFO(mode)) return "fifo";
+#endif
+#ifdef VFS_S_ISLNK
+    if (VFS_S_ISLNK(mode)) return "symlink";
+#endif
+#ifdef VFS_S_ISSOCK
+    if (VFS_S_ISSOCK(mode)) return "socket";
+#endif
     return "unknown";
 }
 
-static void tm_to_str(time_t t, char out[32]) {
-    struct tm tmv; localtime_r(&t, &tmv);
-    strftime(out, 32, "%Y-%m-%d %H:%M:%S", &tmv);
+static void time_to_str(int64_t sec, char *buf, size_t bufsz)
+{
+    time_t tt = (time_t)sec;
+    struct tm *tmv = localtime(&tt);
+
+    if (!tmv) {
+        snprintf(buf, bufsz, "%" PRId64, sec);
+        return;
+    }
+
+    strftime(buf, bufsz, "%Y-%m-%d %H:%M:%S", tmv);
 }
 
-int cmd_stat(int argc, char **argv) {
-    if (argc != 2) { usage(); return 1; }
-    const char *path = argv[1];
+int cmd_stat(int argc, char **argv)
+{
+    struct g_stat st;
+    const char *path;
+    char mt[32], at[32], ct[32];
 
-    struct stat st;
-    if (lstat(path, &st) != 0) {
-        fprintf(stderr, "stat: cannot stat '%s': %s\n", path, strerror(errno));
+    if (argc < 2) {
+        fprintf(stderr, "usage: stat <path>\n");
         return 1;
     }
 
-    char mtime[32], atime[32], ctime_[32];
-    tm_to_str(st.st_mtime, mtime);
-    tm_to_str(st.st_atime, atime);
-    tm_to_str(st.st_ctime, ctime_);
+    path = argv[1];
+    memset(&st, 0, sizeof st);
 
-    printf("  File: %s\n", path);
-    printf("  Type: %s\n", type_str(st.st_mode));
-    printf("  Size: %" PRIuMAX " bytes\n", (uintmax_t)st.st_size);
-    printf(" Links: %lu\n", (unsigned long)st.st_nlink);
-    printf("  Mode: %o (octal)\n", (unsigned)(st.st_mode & 07777));
-#ifdef __CYGWIN__
-    printf("  UID:  %u  GID: %u\n", (unsigned)st.st_uid, (unsigned)st.st_gid);
-#else
-    printf("  UID:  %u  GID: %u\n", (unsigned)st.st_uid, (unsigned)st.st_gid);
-#endif
-    printf("Access: %s\n", atime);
-    printf("Modify: %s\n", mtime);
-    printf("Change: %s\n", ctime_);
-
-    if (S_ISLNK(st.st_mode)) {
-		char linkto[PATH_MAX];
-		int n = vfs_readlink(path, linkto, sizeof(linkto));
-		if (n >= 0) {
-			/* vfs_readlink() leaves NUL room; but be defensive anyway */
-			linkto[(n < (int)sizeof(linkto)) ? n : (int)sizeof(linkto) - 1] = '\0';
-			printf(" -> %s\n", linkto);
-		} else {
-			puts(" -> (unreadable link)");
-		}
+    if (vfs_stat(path, &st) != 0) {
+        fprintf(stderr, "stat: cannot stat '%s'\n", path);
+        return 1;
     }
+
+    time_to_str(st.st_mtim.tv_sec, mt, sizeof mt);
+    time_to_str(st.st_atim.tv_sec, at, sizeof at);
+    time_to_str(st.st_ctim.tv_sec, ct, sizeof ct);
+
+    printf("Path: %s\n", path);
+    printf("Type: %s\n", type_str(st.st_mode));
+    printf("Mode: %o\n", (unsigned)(st.st_mode & 07777u));
+    printf("Size: %" PRIu64 "\n", st.st_size);
+    printf("Links: %" PRIu32 "\n", st.st_nlink);
+    printf("UID: %" PRIu32 "\n", st.st_uid);
+    printf("GID: %" PRIu32 "\n", st.st_gid);
+    printf("Inode: %" PRIu64 "\n", st.st_ino);
+    printf("Blocks: %" PRIu64 "\n", st.st_blocks);
+    printf("Block size: %" PRIu32 "\n", st.st_blksize);
+    printf("Access: %s\n", at);
+    printf("Modify: %s\n", mt);
+    printf("Change: %s\n", ct);
 
     return 0;
 }

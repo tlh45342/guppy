@@ -10,11 +10,6 @@
 #include "genhd.h"
 #include "debug.h"   // for DBG(...)
 
-/* If DBG isn't provided by debug.h, default to no-op so builds still succeed. */
-#ifndef DBG
-#define DBG(fmt, ...) do { (void)0; } while (0)
-#endif
-
 static void usage(void) {
     printf(
         "usage:\n"
@@ -24,54 +19,20 @@ static void usage(void) {
     );
 }
 
-static int is_parent_row(const vblk_t *e) { return e->part_index == -1; }
-
-static void list_devices(void) {
-	DBG("list_devices:");
-	
-    if (g_vblk_count == 0) { printf("(no devices registered)\n"); return; }
+static void list_devices(void)
+{
+    if (g_vblk_count == 0) {
+        printf("(no devices registered)\n");
+        return;
+    }
 
     for (int i = 0; i < g_vblk_count; ++i) {
         const vblk_t *p = &g_vblk[i];
-        if (!is_parent_row(p)) continue;
-
-        const char *devkey = p->dev[0] ? p->dev : p->name;
-		
-		#ifdef DEBUG
-		if (g_debug_flags > 0){
-			DBG("  debug: flags=0x%08" PRIx32, (uint32_t)g_debug_flags);
-			if (p->lba_size) {
-				DBG("  %-10s %-24s base=%-6" PRIu64 " size=%" PRIu64 " LBAs",
-					   p->name, devkey, p->lba_start, p->lba_size);
-			} else {
-				DBG("  %-10s %-24s base=%-6" PRIu64 " size=unknown",
-					   p->name, devkey, p->lba_start);
-			}
-		}
-		#endif
-
-        struct item { const vblk_t *row; int idx; } items[256];
-        int n = 0;
-        for (int j = 0; j < g_vblk_count && n < (int)(sizeof items / sizeof items[0]); ++j) {
-            const vblk_t *e = &g_vblk[j];
-            size_t plen = strlen(p->name);
-            if (strncmp(e->name, p->name, plen) != 0) continue;
-            if (e->name[plen] == '\0') continue; // parent
-            const char *q = e->name + plen; int ok = 1;
-            for (const char *t=q; *t; ++t) if (!isdigit((unsigned char)*t)) { ok = 0; break; }
-            if (!ok) continue;
-            int idx = 0; for (const char *t=q; *t; ++t) idx = idx*10 + (*t - '0');
-            items[n].row = e; items[n].idx = idx; ++n;
-        }
-        for (int a=0; a<n; ++a)
-            for (int b=a+1; b<n; ++b)
-                if (items[b].idx < items[a].idx) { struct item tmp = items[a]; items[a]=items[b]; items[b]=tmp; }
-        for (int k=0; k<n; ++k) {
-            const vblk_t *e = items[k].row;
-            /* Only show child partition details when debugging */
-            printf("  %-8s start=%" PRIu64 " size=%" PRIu64 " LBAs\n",
-                e->name, e->lba_start, e->lba_size);
-        }
+        printf("%-10s %-24s start=%" PRIu64 " size=%" PRIu64 " LBAs\n",
+               p->name,
+               p->dev[0] ? p->dev : "-",
+               p->lba_start,
+               p->lba_size);
     }
 }
 
@@ -123,17 +84,13 @@ static int handle_use_attach(const char *image_path, const char *devname) {
 
     const char *devkey = par->dev[0] ? par->dev : par->name;
 	
-	#ifdef DEBUG
-	if (g_debug_flags > 0){
-		if (par->lba_size) {
-			DBG("%-10s %-24s base=%-6" PRIu64 " size=%" PRIu64 " LBAs",
-				   par->name, devkey, par->lba_start, par->lba_size);
-		} else {
-			DBG("%-10s %-24s base=%-6" PRIu64 " size=unknown",
-				par->name, devkey, par->lba_start);
-		}
-	}
-	#endif
+    if (par->lba_size) {
+        DBG("%-10s %-24s base=%-6" PRIu64 " size=%" PRIu64 " LBAs",
+            par->name, devkey, par->lba_start, par->lba_size);
+    } else {
+        DBG("%-10s %-24s base=%-6" PRIu64 " size=unknown",
+            par->name, devkey, par->lba_start);
+    }
     fflush(stdout);
     return 0;
 }

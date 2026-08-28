@@ -7,6 +7,7 @@
 #include <errno.h>
 
 #include "debug.h"
+#include "cwd.h"
 #include "vfs.h"
 #include "vfs_stat.h"
 
@@ -50,9 +51,7 @@ int vfs_register(const filesystem_type_t *fst) {
         if (strcasecmp(g_fs[i].name, fst->name) == 0) return 0;
     }
     g_fs[g_fs_n++] = (fs_entry_t){ fst->name, fst };
-#ifdef DEBUG
     DBG("vfs: registered '%s'", fst->name);
-#endif
     return 0;
 }
 
@@ -69,9 +68,7 @@ int vfs_register_alias(const char *alias, const filesystem_type_t *target) {
     if (!alias || !target) return -1;
     if (g_fs_n >= VFS_MAX_FS_TYPES) return -1;
     g_fs[g_fs_n++] = (fs_entry_t){ alias, target };
-#ifdef DEBUG
     DBG("vfs: alias '%s' -> '%s'", alias, target->name ? target->name : "?");
-#endif
     return 0;
 }
 
@@ -104,19 +101,60 @@ typedef struct mount_rec {
 static mount_rec_t g_mnt[VFS_MAX_MOUNTS];
 static int         g_mnt_n = 0;
 
-/* Normalize path: convert '\' to '/', collapse '//' and trim trailing '/', keep "/" */
+/*
+ * Convert a user path into one canonical absolute VFS path.
+ * Relative paths are resolved against Guppy's cwd before mount routing.
+ */
 static void vfs_normalize_path(const char *in, char *out, size_t cap) {
-    if (!in || !*in) { strncpy(out, "/", cap); out[cap-1] = '\0'; return; }
-    size_t j = 0; char prev = 0;
-    for (size_t i = 0; in[i] && j + 1 < cap; ++i) {
-        char c = in[i];
-        if (c == '\\') c = '/';
-        if (c == '/' && prev == '/') continue;
-        out[j++] = c; prev = c;
+    char combined[VFS_PATH_MAX * 2];
+    const char *cwd = cwd_get();
+
+    if (!out || cap == 0) return;
+    out[0] = '\0';
+
+    if (!in || !*in) in = ".";
+    if (!cwd || !*cwd || cwd[0] != '/') cwd = "/";
+
+    if (in[0] == '/' || in[0] == '\\')
+        snprintf(combined, sizeof combined, "%s", in);
+    else if (strcmp(cwd, "/") == 0)
+        snprintf(combined, sizeof combined, "/%s", in);
+    else
+        snprintf(combined, sizeof combined, "%s/%s", cwd, in);
+
+    size_t oi = 0;
+    out[oi++] = '/';
+    out[oi] = '\0';
+
+    size_t i = 0;
+    while (combined[i]) {
+        while (combined[i] == '/' || combined[i] == '\\') ++i;
+        if (!combined[i]) break;
+
+        size_t start = i;
+        while (combined[i] && combined[i] != '/' && combined[i] != '\\') ++i;
+        size_t seglen = i - start;
+
+        if (seglen == 1 && combined[start] == '.') continue;
+
+        if (seglen == 2 && combined[start] == '.' && combined[start + 1] == '.') {
+            if (oi > 1) {
+                while (oi > 1 && out[oi - 1] != '/') --oi;
+                if (oi > 1) --oi;
+                out[oi] = '\0';
+            }
+            continue;
+        }
+
+        if (oi > 1) {
+            if (oi + 1 >= cap) { out[0] = '\0'; return; }
+            out[oi++] = '/';
+        }
+        if (oi + seglen >= cap) { out[0] = '\0'; return; }
+        memcpy(out + oi, combined + start, seglen);
+        oi += seglen;
+        out[oi] = '\0';
     }
-    out[j] = '\0';
-    size_t n = strlen(out);
-    while (n > 1 && out[n-1] == '/') { out[n-1] = '\0'; --n; }
 }
 
 /* Longest-prefix match mount */
@@ -438,13 +476,19 @@ int vfs_open(const char *path, int flags, uint32_t mode, struct file **out) {
     if (!target && (flags & VFS_O_CREAT)) {
         if (!r.dir->i_op->create) return -1;
         if (r.leaf[0] == '\0')    return -1;
-        if (r.dir->i_op->create(r.dir, r.leaf, mode, &target) != 0 || !target) return -1;
+        if (r.dir->i_op->create(r.dir, r.leaf, mode, &target) != 0 || !target)
+            return -1;
     }
-#else
-    if (!target) {
-        if (flags & VFS_O_CREAT) return -1;
+
+    /*
+     * A missing pathname without O_CREAT is an ordinary open failure.
+     * Do not fall through and dereference target below.
+     */
+    if (!target)
         return -1;
-    }
+#else
+    if (!target)
+        return -1;
 #endif
 
     if ((flags & VFS_O_DIRECTORY) && !VFS_S_ISDIR(target->i_mode)) return -1;
@@ -487,6 +531,50 @@ int vfs_mkdir(const char *path, unsigned mode) {
     (void)path; (void)mode;
     return -1;
 #endif
+}
+
+int vfs_unlink(const char *path) {
+    if (!path || !*path) return -1;
+
+    /*
+     * Resolve the PARENT, not the complete pathname.  vfs_walk_rel()
+     * intentionally clears path_res.leaf once an existing target is fully
+     * resolved, which is correct for open/stat but loses the basename an
+     * unlink operation must pass to inode_ops->unlink().
+     */
+    char norm[VFS_PATH_MAX];
+    vfs_normalize_path(path, norm, sizeof norm);
+    if (!strcmp(norm, "/")) return -1;
+
+    char parent[VFS_PATH_MAX];
+    char leaf[VFS_PATH_MAX];
+    const char *slash = strrchr(norm, '/');
+    if (!slash) return -1;  /* normalized VFS paths should always be absolute */
+
+    snprintf(leaf, sizeof leaf, "%s", slash + 1);
+    if (!leaf[0] || !strcmp(leaf, ".") || !strcmp(leaf, "..")) return -1;
+
+    if (slash == norm) {
+        snprintf(parent, sizeof parent, "/");
+    } else {
+        size_t n = (size_t)(slash - norm);
+        if (n >= sizeof parent) return -1;
+        memcpy(parent, norm, n);
+        parent[n] = '\0';
+    }
+
+    path_res_t pr;
+    if (vfs_resolve_path(parent, &pr) != 0 || !pr.node) return -1;
+    inode_t *dir = pr.node;
+    if (!VFS_S_ISDIR(dir->i_mode) || !dir->i_op ||
+        !dir->i_op->lookup || !dir->i_op->unlink)
+        return -1;
+
+    inode_t *target = NULL;
+    if (dir->i_op->lookup(dir, leaf, &target) != 0 || !target) return -1;
+    if (VFS_S_ISDIR(target->i_mode)) return -1;
+
+    return dir->i_op->unlink(dir, leaf);
 }
 
 /* ---------- Metadata ---------- */
@@ -534,14 +622,23 @@ int vfs_readlink(const char *path, char *buf, size_t bufsz) {
     return n;
 }
 
-ssize_t vfs_getdents64(struct file *f, void *buf, size_t bytes) {
-    if (!f || !f->f_op || !f->f_op->getdents64) return -ENOTDIR;
-    DBG("vfs:getdents64 enter pos=%llu cap=%zu",
-        (unsigned long long)f->f_pos, bytes);
-    ssize_t n = f->f_op->getdents64(f, buf, bytes);
-    DBG("vfs:getdents64 -> n=%zd newpos=%llu",
-        n, (unsigned long long)f->f_pos);
+ssize_t vfs_getdents64(struct file *f, void *buf, size_t bytes)
+{
+    ssize_t n;
+
+    if (!f || !f->f_op || !f->f_op->getdents64)
+        return -ENOTDIR;
+
+    DBG("vfs:getdents64 enter pos=%llu cap=%llu",
+        (unsigned long long)f->f_pos,
+        (unsigned long long)bytes);
+
+    n = f->f_op->getdents64(f, buf, bytes);
+
+    DBG("vfs:getdents64 -> n=%lld newpos=%llu",
+        (long long)n,
+        (unsigned long long)f->f_pos);
+
     return n;
 }
-
 

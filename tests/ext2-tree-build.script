@@ -1,0 +1,16 @@
+create ext2-tree.img --size 64MiB
+use -i ext2-tree.img /dev/a
+gpt init /dev/a
+gpt add /dev/a --type linuxfs --name "rootfs" --start 1MiB --size 100%
+partscan /dev/a
+mkfs.ext2 /dev/a1
+mount /dev/a1 /target
+mkdir -p /target/boot/grub
+mkdir -p /target/etc
+mkdir -p /target/bin
+echo guppy-ext2-tree-ok > /target/etc/probe.txt
+ls -l /target
+ls -l /target/boot
+ls -l /target/boot/grub
+ls -l /target/etc
+cat /target/etc/probe.txt

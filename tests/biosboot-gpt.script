@@ -1,0 +1,9 @@
+# Guppy 0.0.32 BIOS Boot Partition smoke test
+create target-b1.img 64M
+use /dev/a target-b1.img
+gpt init /dev/a
+gpt add /dev/a --type biosboot --name bios --start 1M --size 1M
+gpt add /dev/a --type linuxfs --name rootfs --start 2M --size 62M
+gpt print /dev/a
+partscan /dev/a
+use

@@ -1,0 +1,8 @@
+use -i ext2-tree.img /dev/a
+partscan /dev/a
+mount /dev/a1 /target
+ls -l /target
+ls -l /target/boot
+ls -l /target/boot/grub
+ls -l /target/etc
+cat /target/etc/probe.txt

@@ -32,7 +32,7 @@
 
 ## Filesystems
 
-- `src/iso9660.c` — ISO9660 reader: PVD/SVD probe, directory walk, name decoding (Joliet aware), read-by-path  
+- `src/iso9660.c`, `src/iso9660_walk.c` — ISO9660 reader and Rock Ridge/SUSP decoding (`SP`, `NM`, `PX`, `TF`, `CE`, `SL`)  
 - `src/ext2.c`, `src/ext2_dir.c` — minimal ext2 reader/writer (WIP)  
 - `src/fs_vfat.c`, `src/fat_compat.c` — FAT/VFAT helpers (WIP)
 
@@ -41,10 +41,13 @@
 - Core:
   `cmd_use.c`, `cmd_mount.c`, `cmd_ls.c`, `cmd_pwd.c`, `cmd_cat.c`, `cmd_mkdir.c`, `cmd_cp.c`, `cmd_do.c`, `cmd_help.c`, `cmd_exit.c`, `cmd_version.c`, `cmd_echo.c`, `cmd_parted.c`, `cmd_part.c`, `cmd_mbr.c`, `cmd_gpt.c`, `cmd_mkfs_ext2.c`, `cmd_mkfs_fat.c`, `cmd_mkfs_vfat.c`, `cmd_mkfs_ntfs.c`
 
-- **Local host helpers (new):**
+- **Local host helpers:**
   - `cmd_lls.c` — list host files in PWD (`lls [-l] [-a] [path]`)
   - `cmd_lcat.c` — print host file (`lcat <file>`)
-  - `cmd_stat.c` — show host file metadata (`stat <path>`)
+  - `cmd_lcp.c` — copy a host file into the mounted VFS
+
+- **VFS metadata:**
+  - `cmd_stat.c` — show mounted-filesystem metadata through `vfs_stat()`
 
 - Registry:
   `cmd_registry.c` — adds `lls`, `lcat`, `stat` to the command table  
@@ -59,4 +62,4 @@
 ### Notes
 - `mount` with **no args** prints the current mount table (or a “no mounts” message).  
 - ISO9660 is **baked in**; no `-D` flag is required at build time.  
-- Debugging: compile with `-DDEBUG`, use `debug [iso|vfs|all] on` in the REPL.
+- Debugging is compiled in and runtime-disabled by default; use `debug [iso|vfs|all] on` in the REPL.

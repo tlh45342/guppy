@@ -2,7 +2,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include "fs_format.h"
-#include "devmap.h"
+#include "diskio.h"
+#include "debug.h"
 
 // usage: mkfs.fat /dev/a [-o lba] [-S bps] [-c spc] [-F 12|16|32] [-L label] [-n oem] [-v]
 int cmd_mkfs_fat(int argc, char **argv){
@@ -12,11 +13,14 @@ int cmd_mkfs_fat(int argc, char **argv){
     }
     const char *dev = argv[1];
 
-    const char *mapped = devmap_resolve(dev);
-    if (!mapped){
-        printf("mkfs.fat: device not mapped: %s\n", dev);
-        return 1;
-    }
+	const char *mapped = diskio_resolve(dev);
+	if (!mapped){
+		printf("mkfs.fat: device not mapped: %s\n", dev);
+		return 1;
+	}
+
+    DBG("mkfs.fat: %s -> %s", dev, mapped);
+
     char path[512] = {0};
     strncpy(path, mapped, sizeof path - 1);
 

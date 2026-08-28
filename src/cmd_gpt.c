@@ -11,6 +11,7 @@
 #include "diskio.h"
 #include "vblk.h"
 #include "genhd.h"
+#include "helper.h"
 
 #include <strings.h>                  // for strcasecmp on POSIX/Cygwin
 #if defined(_MSC_VER) && !defined(strcasecmp)
@@ -115,9 +116,18 @@ static const uint8_t TYPE_LINUXFS[16] = {
     0xAF,0x3D,0xC6,0x0F,0x83,0x84,0x72,0x47,0x8E,0x79,0x3D,0x69,0xD8,0x47,0x7D,0xE4
 };
 
+/* BIOS Boot Partition type GUID, on-disk byte order:
+   21686148-6449-6E6F-744E-656564454649  =>
+   48 61 68 21 49 64 6F 6E 74 4E 65 65 64 45 46 49
+*/
+static const uint8_t TYPE_BIOSBOOT[16] = {
+    0x48,0x61,0x68,0x21,0x49,0x64,0x6F,0x6E,0x74,0x4E,0x65,0x65,0x64,0x45,0x46,0x49
+};
+
 static const uint8_t *type_guid_for(const char *type){
     if (!type) return NULL;
     if (strcasecmp(type, "linuxfs")==0 || strcasecmp(type,"linux")==0) return TYPE_LINUXFS;
+    if (strcasecmp(type, "biosboot")==0 || strcasecmp(type,"bios")==0) return TYPE_BIOSBOOT;
     return NULL;
 }
 
@@ -246,11 +256,12 @@ static bool parse_size_spec(const char *s, uint64_t *out_bytes, uint32_t *out_pc
     while (*s==' ' || *s=='\t') ++s;
 
     size_t len = strlen(s);
-    // percentage?
+
+    /* Percentage of the applicable GPT span. */
     if (len && s[len-1]=='%') {
         char *end=NULL;
         long p = strtol(s, &end, 10);
-        if (end && *end=='%' && p>=0 && p<=100) {
+        if (end && *end=='%' && end[1]=='\0' && p>=0 && p<=100) {
             if (out_pct) *out_pct = (uint32_t)p;
             if (out_bytes) *out_bytes = 0;
             if (out_sectors) *out_sectors = 0;
@@ -259,11 +270,11 @@ static bool parse_size_spec(const char *s, uint64_t *out_bytes, uint32_t *out_pc
         return false;
     }
 
-    // sectors suffix 's' or 'S'
+    /* Absolute sector notation remains available for low-level work. */
     if (len && (s[len-1]=='s' || s[len-1]=='S')) {
         char *end=NULL;
         uint64_t v = strtoull(s, &end, 10);
-        if (end && (*end=='s' || *end=='S')) {
+        if (end && (*end=='s' || *end=='S') && end[1]=='\0') {
             if (out_sectors) *out_sectors = v;
             if (out_bytes) *out_bytes = 0;
             if (out_pct) *out_pct = 0;
@@ -272,31 +283,12 @@ static bool parse_size_spec(const char *s, uint64_t *out_bytes, uint32_t *out_pc
         return false;
     }
 
-    // bytes with unit
-    // normalize a small copy
-    char tmp[64]; snprintf(tmp, sizeof tmp, "%s", s);
-    for (char *p=tmp; *p; ++p) *p=(char)tolower((unsigned char)*p);
+    /* All byte-size notation is shared with create and other commands. */
+    int ok = 0;
+    uint64_t bytes = parse_size(s, &ok);
+    if (!ok) return false;
 
-    uint64_t mul = 1;
-    if (strstr(tmp, "kib")) mul = 1024ull;
-    else if (strstr(tmp, "kb")) mul = 1000ull;
-    else if (strstr(tmp, "mib")) mul = 1024ull*1024ull;
-    else if (strstr(tmp, "mb"))  mul = 1000ull*1000ull;
-    else if (strstr(tmp, "gib")) mul = 1024ull*1024ull*1024ull;
-    else if (strstr(tmp, "gb"))  mul = 1000ull*1000ull*1000ull;
-    else {
-        // maybe plain number: treat as bytes
-        mul = 1ull;
-    }
-
-    // strip non-digits for strtoull
-    char num[64]={0}; size_t j=0;
-    for (size_t i=0; tmp[i] && j+1<sizeof num; ++i) {
-        if ((tmp[i]>='0' && tmp[i]<='9')) num[j++]=tmp[i];
-    }
-    if (j==0) return false;
-    uint64_t v = strtoull(num, NULL, 10);
-    if (out_bytes) *out_bytes = v * mul;
+    if (out_bytes) *out_bytes = bytes;
     if (out_pct) *out_pct = 0;
     if (out_sectors) *out_sectors = 0;
     return true;
@@ -351,6 +343,7 @@ static int gpt_cmd_print(const char *target) {
 
         const char *type = "unknown";
         if (memcmp(e->type_guid, TYPE_LINUXFS, 16)==0) type="linuxfs";
+        else if (memcmp(e->type_guid, TYPE_BIOSBOOT, 16)==0) type="biosboot";
 
         printf("%3u  %12" PRIu64 "  %12" PRIu64 "  %10.1f  %-10s  %-16s\n",
                idx++, first, last, mb, type, name);
@@ -633,8 +626,8 @@ static void usage(void){
       "  gpt init  <dev>                          # create protective MBR + GPT (empty)\n"
       "  gpt add <dev> <type> <name> <first> <last>\n"
       "  gpt add <dev> --type <t> --name <n> --start <spec> [--size <spec> | --end <spec>]\n"
-      "    size/start spec examples: 2048s | 1MiB | 64MB | 100%%\n"
-      "Supported types: linuxfs\n"
+      "    size/start spec examples: 2048s | 1M | 1MiB | 64MB | 100%%\n"
+      "Supported types: linuxfs biosboot\n"
     );
 }
 

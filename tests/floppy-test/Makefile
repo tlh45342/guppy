@@ -1,0 +1,2 @@
+all:
+	guppy < guppy.script

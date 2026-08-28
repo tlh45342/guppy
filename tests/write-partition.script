@@ -1,0 +1,9 @@
+create write-test.img 64M
+use -i write-test.img /dev/a
+gpt init /dev/a
+gpt add /dev/a --type biosboot --name bios --start 1M --size 1M
+gpt add /dev/a --type linuxfs --name rootfs --start 2M --size 62M
+gpt print /dev/a
+partscan /dev/a
+# Supply a small local file named boot1.bin before running this test.
+write /dev/a1 boot1.bin

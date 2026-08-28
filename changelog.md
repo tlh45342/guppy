@@ -6,6 +6,59 @@ The format is based on **Keep a Changelog** and this project aims to follow **Se
 - SemVer: https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
+
+## [0.0.34] – 2026-08-27
+
+### Fixed
+- `stat` now resolves mounted filesystem paths through `vfs_stat()` instead of
+  the host operating system.
+- Relative VFS paths now resolve against Guppy's current working directory.
+- `cd` validates that its target exists and is a directory before updating cwd.
+
+### Added
+- Rock Ridge / SUSP support for ISO9660:
+  - `SP` SUSP detection.
+  - `NM` POSIX filenames.
+  - `PX` POSIX mode, UID, GID, and link count.
+  - `TF` timestamps.
+  - `CE` continuation areas.
+  - `SL` symbolic-link target decoding and VFS `readlink` exposure.
+- MIT licensing and author information in project documentation.
+
+### Notes
+- Rock Ridge filename decoding is shared by directory enumeration and lookup.
+- Large multi-megabyte EXT2 writes remain a later correctness/performance round.
+
+
+## [0.0.31] – 2026-08-27
+
+- `create` now prefers the compact form `create <image> <size>`, for example
+  `create target.img 64M`.
+- Existing `create <image> --size <size>` and `--size=<size>` forms remain
+  supported for compatibility.
+- Centralized size semantics used by `create` and GPT byte-size specifications:
+  - `K`, `M`, `G` are binary convenience units (KiB/MiB/GiB).
+  - `KiB`, `MiB`, `GiB` are explicit IEC binary units.
+  - `KB`, `MB`, `GB` are decimal SI units.
+  - plain numbers are bytes.
+- GPT retains `s` for explicit sector/LBA values and `%` for percentage-based
+  placement/sizing.
+- Added size-syntax documentation and a small script probe.
+
+
+## [0.0.30] – 2026-08-26
+### Added
+- Persistent EXT2 directory creation through the mounted VFS, including nested `mkdir -p`.
+- Persistent lookup and directory listing for nested EXT2 directories.
+- Nested EXT2 file creation, so VFS `cp`/`echo` can write files below the filesystem root.
+
+### Changed
+- EXT2 mutation is now tied to the resolved backing image/partition (`key` + filesystem offset) instead of a path-only global helper.
+- Removed the temporary in-memory EXT2 directory registry; directory visibility now comes from on-disk EXT2 structures.
+
+### Notes
+- The current EXT2 writer remains intentionally small: regular-file writes are limited to one filesystem block (1 KiB with the current formatter). Multi-block/indirect file support is a later phase.
+
 ### Added
 - **Local host utilities**:
   - `lls` – local directory listing (`lls [-l] [-a] [path]`).
@@ -44,4 +97,12 @@ The format is based on **Keep a Changelog** and this project aims to follow **Se
 
 ## [0.0.25] – 2025-09-?? (baseline)
 Initial public baseline visible in logs (`Guppy 0.0.25`).  
-Core features: REPL, device attach (`use`), partition scan (MBR/GPT), basic VFS, `mount`, `ls`, `ca
+Core features: REPL, device attach (`use`), partition scan (MBR/GPT), basic VFS, `mount`, `ls`, `cat`, and basic filesystem tooling.
+
+## 0.0.33 - raw partition write
+
+- Added `write <dev> <host-file> [offset]`.
+- Writes a host file directly into a registered Guppy block device or partition.
+- The optional offset is relative to the selected device/partition and uses Guppy's common size syntax.
+- Bounds checks prevent a write from extending beyond the selected partition.
+- Intended first use: placing boot-stage payloads in a GPT BIOS Boot Partition without teaching Guppy about any particular bootloader.

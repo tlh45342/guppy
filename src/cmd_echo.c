@@ -1,10 +1,11 @@
 // src/cmd_echo.c — echo text to stdout or to a file (creating parent dirs as needed)
 // Usage:
-//   echo [-n] [-a] [--] <text ...>                # print to stdout
-//   echo [-n] [-a] [--] <text ...> <target_path>  # write to file (mkdir -p)
+//   echo [-n] [--] <text ...>                       # print to stdout
+//   echo [-n] [--] <text ...> >  <target_path>      # create/truncate and write
+//   echo [-n] [--] <text ...> >> <target_path>      # create/append and write
 // Flags:
 //   -n / --no-newline : do not append newline
-//   -a / --append     : append to file instead of truncate
+//   -a / --append     : legacy append flag; with a target, append instead of truncate
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -126,7 +127,7 @@ static bool write_entire_file(const char *path, const void *data, size_t len, bo
         p += (size_t)w;
         remain -= (size_t)w;
     }
-    vfs_close(f);
+    if (vfs_close(f) != 0) return false;
     return true;
 }
 
@@ -161,19 +162,23 @@ int cmd_echo(int argc, char **argv) {
     bool no_newline = false;
     bool append = false;
 
-    /* Parse flags */
+    /* Parse flags. */
     int i = 1;
     for (; i < argc; ++i) {
         const char *a = argv[i];
         if (strcmp(a, "--") == 0) { i++; break; }
-        if (strcmp(a, "-n") == 0 || strcmp(a, "--no-newline") == 0) { no_newline = true; continue; }
-        if (strcmp(a, "-a") == 0 || strcmp(a, "--append") == 0) { append = true; continue; }
+        if (strcmp(a, "-n") == 0 || strcmp(a, "--no-newline") == 0) {
+            no_newline = true;
+            continue;
+        }
+        if (strcmp(a, "-a") == 0 || strcmp(a, "--append") == 0) {
+            append = true;
+            continue;
+        }
         break;
     }
 
-    int remaining = argc - i;
-    if (remaining <= 0) {
-        /* No text provided */
+    if (i >= argc) {
         if (!no_newline) {
 #ifdef _WIN32
             _setmode(_fileno(stdout), _O_BINARY);
@@ -183,31 +188,55 @@ int cmd_echo(int argc, char **argv) {
         return 0;
     }
 
-    /* Heuristic: if ≥2 non-flag args, treat the last as target path */
+    /*
+     * Redirection is explicit.  The parser leaves '>' / '>>' in argv, so
+     * consume it here rather than letting it become part of the payload.
+     */
+    int redir = -1;
+    for (int k = i; k < argc; ++k) {
+        if (strcmp(argv[k], ">") == 0 || strcmp(argv[k], ">>") == 0) {
+            redir = k;
+            break;
+        }
+    }
+
     const char *target = NULL;
-    int text_start = i, text_end = argc - 1;
-    if (remaining >= 2) {
-        target = argv[argc - 1];
-        text_end = argc - 2;
+    int text_start = i;
+    int text_end = argc - 1;
+
+    if (redir >= 0) {
+        if (redir + 1 >= argc) {
+            fprintf(stderr, "echo: missing target after '%s'\n", argv[redir]);
+            return 1;
+        }
+        if (redir + 2 != argc) {
+            fprintf(stderr, "echo: unexpected arguments after target '%s'\n",
+                    argv[redir + 1]);
+            return 1;
+        }
+
+        target = argv[redir + 1];
+        text_end = redir - 1;
+        append = (strcmp(argv[redir], ">>") == 0) || append;
     }
 
 #ifdef _WIN32
     _setmode(_fileno(stdout), _O_BINARY);
 #endif
 
-    /* Build content buffer */
     char *content = join_words(argv, text_start, text_end, !no_newline);
-    if (!content) { fprintf(stderr, "echo: out of memory\n"); return 1; }
+    if (!content) {
+        fprintf(stderr, "echo: out of memory\n");
+        return 1;
+    }
     size_t content_len = strlen(content);
 
     if (!target) {
-        /* Print to stdout */
         size_t w = fwrite(content, 1, content_len, stdout);
         free(content);
         return (w == content_len) ? 0 : 1;
     }
 
-    /* Write to file (mkdir -p parents) */
     bool ok = write_entire_file(target, content, content_len, append);
     free(content);
     if (!ok) {

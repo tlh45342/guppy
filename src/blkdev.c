@@ -198,7 +198,10 @@ static int gpt_validate_at(vblk_t *dev, uint64_t total_lbas, uint64_t hdr_lba, g
 
     /* entries CRC */
     size_t bytes = (size_t)h.num_entries * h.entry_size;
-    if (bytes == 0 || bytes > ENTRIES_MAX_BYTES) { DBG("  entries blob too large: %zu -> return 0", bytes); return 0; }
+    if (bytes == 0 || bytes > ENTRIES_MAX_BYTES) {
+     	DBG("  entries blob too large: %llu -> return 0", (unsigned long long)bytes);
+		return 0;
+	}
     if (total_lbas && (h.entries_lba * (uint64_t)LSEC + bytes) > total_lbas * (uint64_t)LSEC) {
         DBG("  entries table runs past end of disk -> return 0");
         return 0;

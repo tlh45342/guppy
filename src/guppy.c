@@ -71,16 +71,6 @@ static int repl_loop(void) {
 
     char line[1024];
 	
-	#ifdef DEBUG
-		printf("DEBUG macro is defined (debug mode ON)\n");
-	#else
-		printf("DEBUG macro is not defined (debug mode OFF)\n");
-	#endif
-	
-	#ifdef DEBUG
-		printf("Guppy %s — REPL. Type 'help' or 'exit'.\n", GUPPY_VERSION);
-	#endif
-			
     for (;;) {
         printf("guppy> ");
         fflush(stdout);
@@ -88,7 +78,6 @@ static int repl_loop(void) {
         if (!fgets(line, sizeof line, stdin)) {
             // EOF or error: don't silently exit—just continue or break cleanly
             if (feof(stdin)) {
-                fprintf(stderr, "[repl] EOF on stdin; use 'exit' to quit next time.\n");
                 break;
             }
             if (ferror(stdin)) {
@@ -102,9 +91,6 @@ static int repl_loop(void) {
         (void)run_command_line(line);
 
         if (guppy_exit_requested()) {
-			#ifdef DEBUG
-				fprintf(stderr, "[repl] exit requested.\n");
-			#endif
             break;
         }
         // Keep looping no matter what other rc values were returned.
@@ -118,10 +104,8 @@ int main(int argc, char **argv) {
     /* Initialize VFS early: */
     (void)vfs_init();
 
-	#ifdef DEBUG
-    /* enumerate registered filesystems (debug visibility) */
+    /* DBG() is runtime-gated; this is silent while debug flags are zero. */
     (void)vfs_for_each_fs(_dumpfs, NULL);
-	#endif
 
     // No arguments → REPL
     if (argc <= 1) return repl_loop();

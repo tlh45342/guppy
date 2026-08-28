@@ -71,34 +71,59 @@ int split_argv(char *line, char **argv, int maxv) {
     return argc;
 }
 
-// Accepts: plain integer bytes, or with binary suffixes: B, KiB, MiB, GiB
+/*
+ * Parse a human-readable byte size.
+ *
+ * Preferred short forms use binary powers, matching traditional disk-tool
+ * notation:
+ *     K, M, G       -> 1024, 1024^2, 1024^3
+ *
+ * Explicit IEC forms are equivalent:
+ *     KiB, MiB, GiB -> 1024, 1024^2, 1024^3
+ *
+ * Explicit SI forms use decimal powers:
+ *     KB, MB, GB    -> 1000, 1000^2, 1000^3
+ *
+ * Plain numbers (and an optional B suffix) are bytes.
+ */
 uint64_t parse_size(const char* s, int* ok) {
     *ok = 0;
     if (!s || !*s) return 0;
 
     char *end = NULL;
-    double val = strtod(s, &end);
-    if (end == s) return 0;
+    long double val = strtold(s, &end);
+    if (end == s || val < 0) return 0;
 
-    while (*end == ' ') end++;
+    while (*end == ' ' || *end == '\t') end++;
 
-    uint64_t factor = 1;
-    if (*end == '\0') {
-        factor = 1;
-    } else if (strncaseeq(end, "B", 1)) {
-        factor = 1;
-    } else if (strncaseeq(end, "KiB", 3)) {
+    char suffix[8];
+    size_t n = 0;
+    while (*end && n + 1 < sizeof suffix) {
+        if (*end != ' ' && *end != '\t') suffix[n++] = *end;
+        end++;
+    }
+    suffix[n] = '\0';
+
+    uint64_t factor = 0;
+    if (suffix[0] == '\0' || strncaseeq(suffix, "B", 2)) {
+        factor = 1ULL;
+    } else if (strncaseeq(suffix, "K", 2) || strncaseeq(suffix, "Ki", 3) || strncaseeq(suffix, "KiB", 4)) {
         factor = 1024ULL;
-    } else if (strncaseeq(end, "MiB", 3)) {
+    } else if (strncaseeq(suffix, "M", 2) || strncaseeq(suffix, "Mi", 3) || strncaseeq(suffix, "MiB", 4)) {
         factor = 1024ULL * 1024ULL;
-    } else if (strncaseeq(end, "GiB", 3)) {
+    } else if (strncaseeq(suffix, "G", 2) || strncaseeq(suffix, "Gi", 3) || strncaseeq(suffix, "GiB", 4)) {
         factor = 1024ULL * 1024ULL * 1024ULL;
+    } else if (strncaseeq(suffix, "KB", 3)) {
+        factor = 1000ULL;
+    } else if (strncaseeq(suffix, "MB", 3)) {
+        factor = 1000ULL * 1000ULL;
+    } else if (strncaseeq(suffix, "GB", 3)) {
+        factor = 1000ULL * 1000ULL * 1000ULL;
     } else {
         return 0;
     }
 
-    if (val < 0) return 0;
-    long double bytes_ld = (long double)val * (long double)factor;
+    long double bytes_ld = val * (long double)factor;
     if (bytes_ld > (long double)UINT64_MAX) return 0;
 
     uint64_t bytes = (uint64_t)(bytes_ld + 0.5L);

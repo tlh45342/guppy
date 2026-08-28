@@ -1,0 +1,15 @@
+https://www.easeus.com/partition-manager-software/linux-partition-manager.html
+https://shop.paragon-software.com/277/?scope=checkout&cart=264134&cfg=paragon2018
+
+VMDK
+
+VMware Workstation
+2. Using OSFMount (Third-Party Utility)
+
+winmount
+osfmount
+deamon
+
+qemu-img create -f vmdk disk.vmdk 1G
+
+qemu-img convert -f raw -O vmdk disk.img disk.vmdk

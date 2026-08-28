@@ -2,6 +2,7 @@
 #pragma once
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 /* ---- packing helper ---- */
 #if defined(__GNUC__) || defined(__clang__)
@@ -76,16 +77,20 @@ typedef struct PACKED {
 #undef PACKED
 
 /* ---- public API you’re exposing from ext2.c ---- */
-bool ext2_create_and_write(const char *path, const uint8_t *data, uint32_t len);
+int ext2_unlink_at(const char *key, uint64_t off, const char *path);
+int ext2_truncate_at(const char *key, uint64_t off, const char *path, uint64_t size);
+int ext2_write_existing_at(const char *key, uint64_t off,
+                           const char *path, const void *data, size_t len);
+
+int ext2_create_and_write(const char *key, uint64_t off,
+                          const char *path, const void *data, size_t len);
 
 /* If other TUs need them, you can also declare readers/writers here:
 bool ext2_read_super(ext2_superblock *out);
 bool ext2_read_inode(uint32_t ino, ext2_inode *out);
 */
 
-/* ---- directory creation (planned full implementation) ---- */
-/* Create a single directory (no parents). Returns true on success. */
-bool ext2_mkdir(const char *path);
-
-/* Create all parents as needed (like `mkdir -p`). Returns true on success. */
-bool ext2_mkdir_p(const char *path);
+/* ---- directory creation on a specific EXT2 image/partition ---- */
+/* Path may be mount-relative ("boot/grub") or absolute ("/boot/grub").
+   Parent directories must already exist; VFS mkdir -p handles parent walking. */
+int ext2_mkdir_at(const char *key, uint64_t off, const char *path, uint16_t mode);

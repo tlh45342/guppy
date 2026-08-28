@@ -2,6 +2,8 @@
 
 #pragma once
 #include <stdint.h>
+#include <stddef.h>
+#include <sys/types.h>
 #include <stdbool.h>
 #include <time.h>
 
@@ -36,6 +38,8 @@ typedef struct iso9660 {
     vblk_t   *dev;        /* backing device (2048-byte sectors assumed) */
     uint32_t  block_size; /* logical block size (usually 2048) */
     int       use_joliet; /* 1 if Joliet SVD selected */
+    int       susp_enabled; /* 1 if SUSP SP was detected in root "." record */
+    uint8_t   susp_skip;    /* SUSP bytes to skip before entries in System Use Area */
     uint32_t  pvd_lba;    /* primary volume descriptor LBA (usually 16) */
     uint32_t  root_lba;   /* root directory extent LBA */
     uint32_t  root_size;  /* root directory extent size in bytes */
@@ -80,6 +84,55 @@ bool iso_mount(vblk_t *dev, iso9660_t *out);
 
 bool iso_read_sector(const iso9660_t *iso, uint32_t lba, void *dst);
 
+/* Decode the effective name of one ISO9660 directory record.
+   If Rock Ridge/SUSP is active and an NM entry is present, NM wins.
+   Otherwise this falls back to the normal ISO9660 identifier.
+   Returns true on a usable name, false on malformed input. */
+bool iso_dir_record_name(const iso9660_t *iso, const uint8_t *rec,
+                         char *out, size_t out_cap, bool *used_rr_nm);
+
+typedef struct {
+    bool     present;
+    uint32_t mode;
+    uint32_t nlink;
+    uint32_t uid;
+    uint32_t gid;
+} iso_rr_px_t;
+
+/* Decode Rock Ridge PX POSIX metadata from one directory record.
+   Returns true when a PX entry is present and valid; false otherwise. */
+bool iso_dir_record_px(const iso9660_t *iso, const uint8_t *rec,
+                       iso_rr_px_t *out_px);
+
+typedef struct {
+    bool   present;
+    bool   has_atime;
+    bool   has_mtime;
+    bool   has_ctime;
+    time_t atime;
+    time_t mtime;
+    time_t ctime;
+} iso_rr_tf_t;
+
+/* Decode Rock Ridge TF timestamps from one directory record.
+   Supports the standard 7-byte timestamps and the 17-byte long form. */
+bool iso_dir_record_tf(const iso9660_t *iso, const uint8_t *rec,
+                       iso_rr_tf_t *out_tf);
+
+/* CE-aware Rock Ridge decoders. These follow SUSP CE continuation areas
+   while retaining the inline System Use Area as the first segment. */
+bool iso_dir_record_name_ce(const iso9660_t *iso, const uint8_t *rec,
+                            char *out, size_t out_cap, bool *used_rr_nm);
+bool iso_dir_record_px_ce(const iso9660_t *iso, const uint8_t *rec,
+                          iso_rr_px_t *out_px);
+bool iso_dir_record_tf_ce(const iso9660_t *iso, const uint8_t *rec,
+                          iso_rr_tf_t *out_tf);
+
+/* Decode Rock Ridge SL symbolic-link components, including CE continuations.
+   The returned target is NUL-terminated on success. */
+bool iso_dir_record_sl_ce(const iso9660_t *iso, const uint8_t *rec,
+                          char *out, size_t out_cap);
+
 // ----------------------------------------------------------------------------------------
 
 /* Resolve a directory by path like "/BOOT" or "/EFI/BOOT". */
@@ -107,12 +160,15 @@ bool iso_stat_path(iso9660_t *iso, const char *path,
 
 int  iso_walk_component(const iso9660_t *iso,
                         uint32_t dir_lba,
-						uint32_t dir_size,
+                        uint32_t dir_size,
                         const char *want,
                         uint32_t *out_lba,
-						uint32_t *out_size,
+                        uint32_t *out_size,
                         uint8_t  *out_flags,
-						time_t *out_mtime);
+                        time_t *out_mtime,
+                        iso_rr_px_t *out_px,
+                        iso_rr_tf_t *out_tf,
+                        char *out_sl, size_t out_sl_cap);
 
 struct file;      // from vfs.h
 

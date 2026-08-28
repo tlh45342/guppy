@@ -47,13 +47,16 @@ static int mbr_write_blank(const char *img_path) {
 }
 
 // ---- command: create ----
-// Usage:
-//   create <img> --size <N[KiB|MiB|GiB]> [--mbr]
-//   create <img> --size=256MiB [--mbr]
+// Usage (preferred):
+//   create <img> <size> [--mbr]
+// Compatibility forms retained:
+//   create <img> --size <size> [--mbr]
+//   create <img> --size=<size> [--mbr]
 int cmd_create(int argc, char **argv) {
     if (argc < 3) {
         fprintf(stderr, "create: not enough arguments\n");
-        fprintf(stderr, "usage: create <img> --size <N[KiB|MiB|GiB]> [--mbr]\n");
+        fprintf(stderr, "usage: create <img> <size> [--mbr]\n");
+        fprintf(stderr, "       create <img> --size <size> [--mbr]\n");
         return 2;
     }
 
@@ -82,15 +85,36 @@ int cmd_create(int argc, char **argv) {
             size_bytes = v;
         } else if (strcmp(argv[i], "--mbr") == 0) {
             use_mbr = true;
+        } else if (argv[i][0] != '-' && size_bytes == 0) {
+            int ok = 0;
+            size_bytes = parse_size(argv[i], &ok);
+            if (!ok || size_bytes == 0) {
+                fprintf(stderr, "create: invalid size value '%s'\n", argv[i]);
+                return 2;
+            }
         } else {
-            fprintf(stderr, "create: unknown option: %s\n", argv[i]);
+            fprintf(stderr, "create: unknown option or extra argument: %s\n", argv[i]);
             return 2;
         }
     }
 
     if (size_bytes == 0) {
-        fprintf(stderr, "create: --size is required and must be > 0\n");
+        fprintf(stderr, "create: size is required and must be > 0\n");
         return 2;
+    }
+
+    /*
+     * create means create/recreate an image of exactly the requested size.
+     * file_ensure_size() grows files but intentionally does not shrink an
+     * existing larger file, so truncate the image first.
+     */
+    {
+        FILE *fp = fopen(img, "wb");
+        if (!fp) {
+            perror("create/fopen");
+            return 1;
+        }
+        fclose(fp);
     }
 
     if (file_ensure_size(img, size_bytes) != 0) {

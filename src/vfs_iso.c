@@ -30,6 +30,20 @@ typedef struct iso_inode {
     uint32_t extent_size;
     int      is_dir;
     time_t   mtime;
+    bool     rr_px_present;
+    uint32_t rr_mode;
+    uint32_t rr_nlink;
+    uint32_t rr_uid;
+    uint32_t rr_gid;
+    bool     rr_tf_present;
+    bool     rr_has_atime;
+    bool     rr_has_mtime;
+    bool     rr_has_ctime;
+    time_t   rr_atime;
+    time_t   rr_mtime;
+    time_t   rr_ctime;
+    bool     rr_is_symlink;
+    char     rr_symlink[1024];
 } iso_inode_t;
 
 /* ---- forward prototypes so initializers see the symbols ---- */
@@ -42,6 +56,7 @@ static ssize_t iso_dir_getdents64(struct file *dirf, void *buf, size_t bytes);
 
 static int     iso_getattr     (struct inode *inode, struct g_stat *st);
 static int     iso_lookup      (struct inode *dir, const char *name, struct inode **out);
+static int     iso_readlink    (struct inode *inode, char *buf, size_t bufsz);
 
 /* Directory inode-ops table is defined later; declare it now so iso_lookup can use &ISO_IOPS */
 static const inode_ops_t ISO_IOPS;
@@ -77,7 +92,7 @@ static const inode_ops_t ISO_FILE_IOPS = {
     .setattr  = NULL,
     .truncate = NULL,
     .symlink  = NULL,
-    .readlink = NULL,
+    .readlink = iso_readlink,
 };
 
 static const inode_ops_t ISO_IOPS = {
@@ -95,6 +110,19 @@ static const inode_ops_t ISO_IOPS = {
 
 /* ===== helpers: ASCII name handling for Primary ISO9660 ===== */
 
+// ISO-9660 7-byte "recording date": YY(1900-based), MM, DD, hh, mm, ss, tz (ignored)
+static time_t iso_recdate_to_time(const uint8_t rec[7]) {
+    struct tm t;
+    memset(&t, 0, sizeof t);
+    t.tm_year = rec[0];                 // years since 1900
+    t.tm_mon  = rec[1] ? rec[1]-1 : 0;  // 1..12 → 0..11
+    t.tm_mday = rec[2];
+    t.tm_hour = rec[3];
+    t.tm_min  = rec[4];
+    t.tm_sec  = rec[5];
+    t.tm_isdst = -1;
+    return mktime(&t);                  // we can refine with rec[6] later
+}
 
 static inline int to_upper_ascii(unsigned char c) {
     return (c >= 'a' && c <= 'z') ? (c - 'a' + 'A') : c;
@@ -251,11 +279,17 @@ static int iso_lookup(struct inode *dir, const char *name, struct inode **out) {
 
     uint32_t lba = 0, size = 0;
     uint8_t  flags = 0;
-	time_t   mtime = 0;
+    time_t   mtime = 0;
+    iso_rr_px_t px;
+    iso_rr_tf_t tf;
+    char sl_target[1024];
+    memset(&px, 0, sizeof px);
+    memset(&tf, 0, sizeof tf);
+    sl_target[0] = '\0';
 
     int rc = iso_walk_component(&dip->fs->iso,
                                 dip->extent_lba, dip->extent_size,
-                                name, &lba, &size, &flags, &mtime);
+                                name, &lba, &size, &flags, &mtime, &px, &tf, sl_target, sizeof sl_target);
     if (rc != 1) {
         DBG("iso_lookup: '%s' not found rc=%d", name, rc);
         return -ENOENT;
@@ -271,25 +305,61 @@ static int iso_lookup(struct inode *dir, const char *name, struct inode **out) {
     cip->is_dir      = is_dir;
     cip->extent_lba  = lba;
     cip->extent_size = size;
-	cip->mtime       = mtime;
+    cip->mtime       = mtime;
+    cip->rr_px_present = px.present;
+    cip->rr_mode       = px.mode;
+    cip->rr_nlink      = px.nlink;
+    cip->rr_uid        = px.uid;
+    cip->rr_gid        = px.gid;
+    cip->rr_tf_present = tf.present;
+    cip->rr_has_atime  = tf.has_atime;
+    cip->rr_has_mtime  = tf.has_mtime;
+    cip->rr_has_ctime  = tf.has_ctime;
+    cip->rr_atime      = tf.atime;
+    cip->rr_mtime      = tf.mtime;
+    cip->rr_ctime      = tf.ctime;
+    cip->rr_is_symlink = sl_target[0] != '\0';
+    if (cip->rr_is_symlink)
+        snprintf(cip->rr_symlink, sizeof cip->rr_symlink, "%s", sl_target);
+    if (tf.has_mtime) cip->mtime = tf.mtime;
 
     child->i_ino     = lba; // stable id: start LBA
-    child->i_mode    = (is_dir ? VFS_S_IFDIR : VFS_S_IFREG) |
-                       (is_dir ? VFS_MODE_DIR_0755 : VFS_MODE_FILE_0644);
+    child->i_mode    = cip->rr_is_symlink
+                     ? ((px.present ? (px.mode & 07777u) : 0777u) | VFS_S_IFLNK)
+                     : (px.present
+                        ? px.mode
+                        : ((is_dir ? VFS_S_IFDIR : VFS_S_IFREG) |
+                           (is_dir ? VFS_MODE_DIR_0755 : VFS_MODE_FILE_0644)));
+    child->i_nlink   = px.present ? px.nlink : 1;
+    child->i_uid     = px.present ? px.uid : 0;
+    child->i_gid     = px.present ? px.gid : 0;
     child->i_sb      = dir->i_sb;
     child->i_private = cip;
 
     // Inode ops: dir has .lookup, file does not
     child->i_op  = is_dir ? &ISO_IOPS : &ISO_FILE_IOPS;
 
-    // File ops: single, file-scope tables
-    child->i_fop = is_dir ? &FOPS_DIR : &ISO_FILE_FOPS;
+    // Symlinks expose readlink metadata; regular files expose read().
+    child->i_fop = is_dir ? &FOPS_DIR
+                          : (cip->rr_is_symlink ? NULL : &ISO_FILE_FOPS);
 
     *out = child;
 
     DBG("iso_lookup: name='%s' -> lba=%u size=%u flags=0x%02X (%s)",
         name, lba, size, flags, is_dir ? "DIR" : "FILE");
     return 0;
+}
+
+
+static int iso_readlink(struct inode *inode, char *buf, size_t bufsz) {
+    if (!inode || !buf || bufsz == 0u) return -1;
+    iso_inode_t *ip=(iso_inode_t *)inode->i_private;
+    if (!ip || !ip->rr_is_symlink) return -1;
+
+    size_t n=strlen(ip->rr_symlink);
+    if (n > bufsz) n=bufsz;
+    memcpy(buf,ip->rr_symlink,n);
+    return (int)n;
 }
 
 static int iso_getattr(struct inode *inode, struct g_stat *st) {
@@ -300,7 +370,9 @@ static int iso_getattr(struct inode *inode, struct g_stat *st) {
 
     st->st_mode  = inode->i_mode;
     st->st_ino   = inode->i_ino;
-    st->st_nlink = 1;
+    st->st_nlink = inode->i_nlink ? inode->i_nlink : 1;
+    st->st_uid   = inode->i_uid;
+    st->st_gid   = inode->i_gid;
     st->st_size  = ip->extent_size;
 	st->st_mtime = ip->mtime;
     st->st_blksize = inode->i_sb ? inode->i_sb->block_size : 2048;
@@ -348,8 +420,43 @@ static int iso_mount_fs(vblk_t *dev, const char *opts, superblock_t **out_sb) {
     rip->extent_lba  = fs->iso.root_lba;
     rip->extent_size = fs->iso.root_size;
 
+
+    iso_rr_px_t root_px;
+    iso_rr_tf_t root_tf;
+    memset(&root_px, 0, sizeof root_px);
+    memset(&root_tf, 0, sizeof root_tf);
+
+    uint8_t sec[2048];
+    if (iso_read_sector(&fs->iso, rip->extent_lba, sec)) {
+        // The first record in the root dir extent is "."
+        // Its 7-byte recording date begins at byte offset 18
+        rip->mtime = iso_recdate_to_time(sec + 18);
+        (void)iso_dir_record_px_ce(&fs->iso, sec, &root_px);
+        (void)iso_dir_record_tf_ce(&fs->iso, sec, &root_tf);
+        if (root_tf.has_mtime) rip->mtime = root_tf.mtime;
+    } else {
+        rip->mtime = 0; // fallback (shouldn't happen on a valid ISO)
+    }
+
+    rip->rr_px_present = root_px.present;
+    rip->rr_mode       = root_px.mode;
+    rip->rr_nlink      = root_px.nlink;
+    rip->rr_uid        = root_px.uid;
+    rip->rr_gid        = root_px.gid;
+    rip->rr_tf_present = root_tf.present;
+    rip->rr_has_atime  = root_tf.has_atime;
+    rip->rr_has_mtime  = root_tf.has_mtime;
+    rip->rr_has_ctime  = root_tf.has_ctime;
+    rip->rr_atime      = root_tf.atime;
+    rip->rr_mtime      = root_tf.mtime;
+    rip->rr_ctime      = root_tf.ctime;
+
     root->i_ino     = rip->extent_lba; // handy for debugging
-    root->i_mode    = VFS_S_IFDIR | VFS_MODE_DIR_0755;
+    root->i_mode    = root_px.present ? root_px.mode
+                                      : (VFS_S_IFDIR | VFS_MODE_DIR_0755);
+    root->i_nlink   = root_px.present ? root_px.nlink : 1;
+    root->i_uid     = root_px.present ? root_px.uid : 0;
+    root->i_gid     = root_px.present ? root_px.gid : 0;
     root->i_sb      = sb;
     root->i_op      = &ISO_IOPS;
 	root->i_fop     = &FOPS_DIR;           // use the global one
@@ -402,10 +509,15 @@ static ssize_t iso_dir_getdents64(struct file *dirf, void *buf, size_t bytes)
     uint64_t pos = dirf->f_pos;
     size_t written = 0;
 
-	DBG("iso_dir_getdents64: pos=%llu cap=%zu", (unsigned long long)dirf->f_pos, bytes);
+	DBG("iso_dir_getdents64: pos=%llu cap=%llu",
+		(unsigned long long)dirf->f_pos,
+		(unsigned long long)bytes);
 
-    DBG("iso_dir_getdents64: start pos=%llu cap=%zu (lba=%u size=%u)",
-        (unsigned long long)pos, bytes, base, dsz);
+	DBG("iso_dir_getdents64: start pos=%llu cap=%llu (lba=%u size=%u)",
+		(unsigned long long)pos,
+		(unsigned long long)bytes,
+		(unsigned)base,
+		(unsigned)dsz);
 
     // minimal space: header + 1 char name + NUL
     const size_t MIN_ENTRY = offsetof(vfs_dirent64_t, d_name) + 2;
@@ -435,24 +547,18 @@ static ssize_t iso_dir_getdents64(struct file *dirf, void *buf, size_t bytes)
         uint32_t data_len   = (uint32_t)rec[10]| ((uint32_t)rec[11]<<8)| ((uint32_t)rec[12]<<16)| ((uint32_t)rec[13]<<24);
         uint8_t  flags      = rec[25];
 
-        // Build printable name
+        // Build effective name: Rock Ridge NM when available, ISO fallback otherwise.
         char name[256];
-        if (id_len == 1 && id[0] == 0) {
-            strcpy(name, ".");
-        } else if (id_len == 1 && id[0] == 1) {
-            strcpy(name, "..");
-        } else {
-            // primary ident: uppercase, replace '/', trim ';version'
-            size_t n = id_len < sizeof(name)-1 ? id_len : sizeof(name)-1;
-            for (size_t i = 0; i < n; ++i) {
-                unsigned char c = id[i];
-                if (c == 0) { n = i; break; }
-                if (c == '/') c = '_';
-                if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
-                name[i] = (char)c;
-            }
-            name[n] = '\0';
-            char *semi = strchr(name, ';'); if (semi) *semi = '\0';
+        bool used_rr_nm = false;
+        if (!iso_dir_record_name(&dip->fs->iso, rec, name, sizeof name, &used_rr_nm)) {
+            pos += len;
+            continue;
+        }
+
+        /* Keep historical getdents presentation (uppercase ISO names) when
+           Rock Ridge is absent.  Rock Ridge NM is emitted exactly as stored. */
+        if (!used_rr_nm && !(id_len == 1 && (id[0] == 0 || id[0] == 1))) {
+            for (char *q = name; *q; ++q) *q = (char)to_upper_ascii((unsigned char)*q);
         }
 
         uint8_t dtype = (flags & 0x02) ? VFS_DT_DIR : VFS_DT_REG;
@@ -477,7 +583,8 @@ static ssize_t iso_dir_getdents64(struct file *dirf, void *buf, size_t bytes)
     }
 
     dirf->f_pos = pos;
-    DBG("iso_dir_getdents64: wrote=%zu newpos=%llu",
-        written, (unsigned long long)pos);
+	DBG("iso_dir_getdents64: wrote=%llu newpos=%llu",
+		(unsigned long long)written,
+		(unsigned long long)dirf->f_pos);
     return (ssize_t)written;
 }

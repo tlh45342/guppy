@@ -1,0 +1,7 @@
+create floppy.img --size 1440KiB
+use -i floppy.img /dev/a
+mkfs.fat /dev/a
+mount /dev/a /
+echo "The lazy fox jumped over the log" > hello.txt
+ls -la
+cat hello.txt

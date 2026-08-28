@@ -1,0 +1,7 @@
+# Guppy 0.0.31 size syntax smoke test
+# Expected: short M notation creates a 64 MiB image and GPT accepts M units.
+create size-test.img 64M
+use -i size-test.img /dev/a
+gpt init /dev/a
+gpt add /dev/a --type linuxfs --name rootfs --start 2M --size 60M
+gpt print /dev/a

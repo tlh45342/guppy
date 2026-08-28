@@ -27,6 +27,9 @@
 #define VFS_O_APPEND    0x0800
 #define VFS_O_DIRECTORY 0x1000
 
+/* VFS supports filesystem-specific creation through inode_ops.create. */
+#define VFS_HAVE_CREATE_OP 1
+
 #define VFS_SEEK_SET    0
 #define VFS_SEEK_CUR    1
 #define VFS_SEEK_END    2
@@ -108,6 +111,7 @@ typedef struct super_ops {
 
 typedef struct inode_ops {
     int   (*lookup)(struct inode* dir, const char *name, struct inode **out);
+    int   (*create)(struct inode* dir, const char *name, uint32_t mode, struct inode **out);
     int   (*mkdir)(struct inode* dir, const char *name, uint32_t mode);
     int   (*rmdir)(struct inode* dir, const char *name);
     int   (*unlink)(struct inode* dir, const char *name);
@@ -202,6 +206,7 @@ int     vfs_close(struct file *f);
 ssize_t vfs_read(struct file *f, void *buf, size_t n);
 ssize_t vfs_write(struct file *f, const void *buf, size_t n);
 int     vfs_mkdir(const char *path, unsigned mode);
+int     vfs_unlink(const char *path);
 int     vfs_readlink(const char *path, char *buf, size_t bufsz);
 ssize_t vfs_getdents64(struct file *f, void *buf, size_t bytes);
 

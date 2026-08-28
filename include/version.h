@@ -1,3 +1,3 @@
-// include/version.h
+#pragma once
 
-#define GUPPY_VERSION "0.0.27"
+#define VERSION "0.0.37"

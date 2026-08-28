@@ -1,0 +1,9 @@
+# tests/test3.script
+debug all on
+use -i image2.img /dev/a
+use
+gpt print /dev/a
+partscan /dev/a
+mount /dev/a1 /
+ls
+cat hello.txt

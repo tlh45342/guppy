@@ -7,8 +7,6 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <unistd.h>
-#include <dirent.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -16,16 +14,62 @@
 #include <string.h>
 #include <time.h>
 
+#include <dirent.h>
+
+#if !defined(_WIN32)
+#include <unistd.h>
+#endif
+
 #include "debug.h"
 #ifndef DBG
 #define DBG(...) do{}while(0)
 #endif
 
-static void usage(void) {
+// -----------------------------------------------------------------------------
+// Portability shims
+// -----------------------------------------------------------------------------
+#if defined(_WIN32)
+
+// MinGW commonly has stat(), but not lstat(). Treat lstat as stat.
+#ifndef lstat
+#define lstat(p, stp) stat((p), (stp))
+#endif
+
+// These may be missing in MinGW headers; provide safe fallbacks.
+// (Windows builds will simply report '-' for link/socket filetype.)
+#ifndef S_ISLNK
+#define S_ISLNK(m) (0)
+#endif
+#ifndef S_ISSOCK
+#define S_ISSOCK(m) (0)
+#endif
+
+static int tm_local(time_t tt, struct tm *out)
+{
+    // Windows secure variant: returns 0 on success.
+    return localtime_s(out, &tt);
+}
+
+#else  // POSIX
+
+static int tm_local(time_t tt, struct tm *out)
+{
+    // POSIX: returns out on success, NULL on failure.
+    return (localtime_r(&tt, out) != NULL) ? 0 : -1;
+}
+
+#endif
+
+// -----------------------------------------------------------------------------
+// lls implementation
+// -----------------------------------------------------------------------------
+static void usage(void)
+{
     printf("usage: lls [-l] [-a] [path]\n");
 }
 
-static void mode_to_str(mode_t m, char out[11]) {
+static void mode_to_str(mode_t m, char out[11])
+{
     out[0]  = S_ISDIR(m) ? 'd' :
               S_ISLNK(m) ? 'l' :
               S_ISCHR(m) ? 'c' :
@@ -44,35 +88,42 @@ static void mode_to_str(mode_t m, char out[11]) {
     out[10] = '\0';
 }
 
-static void print_long(const char *dir, const char *name) {
+static void print_long(const char *dir, const char *name)
+{
     char path[4096];
-    if (snprintf(path, sizeof(path), "%s/%s", dir, name) >= (int)sizeof(path)) return;
+    if (snprintf(path, sizeof(path), "%s/%s", dir, name) >= (int)sizeof(path))
+        return;
 
     struct stat st;
     if (lstat(path, &st) != 0) {
-        printf("?????????? ? %12s %s (lstat: %s)\n", "?", name, strerror(errno));
+        printf("?????????? ? %12s %s (stat: %s)\n", "?", name, strerror(errno));
         return;
     }
 
-    char perm[11]; mode_to_str(st.st_mode, perm);
+    char perm[11];
+    mode_to_str(st.st_mode, perm);
 
     char tbuf[32];
     struct tm tmv;
     time_t tt = st.st_mtime;
-#if defined(_POSIX_C_SOURCE)
-    localtime_r(&tt, &tmv);
-#else
-    tmv = *localtime(&tt);
-#endif
+
+    if (tm_local(tt, &tmv) != 0) {
+        // fallback if time conversion fails
+        memset(&tmv, 0, sizeof(tmv));
+    }
     strftime(tbuf, sizeof(tbuf), "%Y-%m-%d %H:%M", &tmv);
 
-    // symlink target (best-effort)
-    char linkto[4096]; ssize_t ln = 0;
-#if defined(S_ISLNK) && !defined(_WIN32)
+    // symlink target (best-effort; POSIX only)
+    char linkto[4096];
+    ssize_t ln = 0;
+
+#if !defined(_WIN32)
+#if defined(S_ISLNK)
     if (S_ISLNK(st.st_mode)) {
-        ln = readlink(path, linkto, sizeof(linkto)-1);
-        if (ln >= 0) { linkto[ln] = '\0'; }
+        ln = readlink(path, linkto, sizeof(linkto) - 1);
+        if (ln >= 0) linkto[ln] = '\0';
     }
+#endif
 #endif
 
     printf("%s %3lu %10" PRIuMAX " %s %s",
@@ -81,11 +132,13 @@ static void print_long(const char *dir, const char *name) {
            (uintmax_t)st.st_size,
            tbuf,
            name);
+
     if (ln > 0) printf(" -> %s", linkto);
     printf("\n");
 }
 
-int cmd_lls(int argc, char **argv) {
+int cmd_lls(int argc, char **argv)
+{
     int opt_long = 0, opt_all = 0;
     const char *path = ".";
 
@@ -93,7 +146,7 @@ int cmd_lls(int argc, char **argv) {
     for (int i = 1; i < argc; ++i) {
         const char *a = argv[i];
         if (a[0] == '-' && a[1]) {
-            for (const char *p = a+1; *p; ++p) {
+            for (const char *p = a + 1; *p; ++p) {
                 if (*p == 'l') opt_long = 1;
                 else if (*p == 'a') opt_all = 1;
                 else { usage(); return 1; }
@@ -112,7 +165,7 @@ int cmd_lls(int argc, char **argv) {
     struct dirent *de;
     while ((de = readdir(d)) != NULL) {
         const char *name = de->d_name;
-        if (!opt_all && name[0] == '.') continue; // skip dot files unless -a
+        if (!opt_all && name[0] == '.') continue;
 
         if (opt_long) print_long(path, name);
         else printf("%s\n", name);
