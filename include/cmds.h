@@ -35,6 +35,7 @@ int cmd_gpt(int argc, char **argv);
 int cmd_use(int argc, char **argv);
 int cmd_pwd(int argc, char **argv);
 int cmd_rm(int argc, char **argv);
+int cmd_sha256(int argc, char **argv);
 int cmd_ls(int argc, char **argv);
 int cmd_mkdir(int argc, char **argv);
 int cmd_cp(int argc, char **argv);

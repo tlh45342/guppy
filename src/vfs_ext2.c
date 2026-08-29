@@ -7,13 +7,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <time.h>
 
 #include "vblk.h"
+#include "diskio.h"
 #include "debug.h"
 #include "vfs.h"
 #include "vfs_stat.h"
-#include "ext2.h"
+#include "ext2.h"   // persistent EXT2 create/mkdir/truncate/unlink helpers
 
 /* -------- feature toggles -------- */
 #ifndef VFS_HAVE_CREATE_OP
@@ -127,16 +127,25 @@ static uint8_t ext2_ft_to_vfs(uint8_t t) {
     }
 }
 
-static bool ext2_find_dir_entry(vblk_t *dev, uint32_t dir_ino, const char *name,
-                                uint32_t *ino_out, uint8_t *type_out) {
+/* Resolve any normal relative path by walking EXT2 directory entries.
+ * This keeps metadata operations such as chmod independent of the in-memory
+ * directory cache used while constructing an image.  Direct directory blocks
+ * are sufficient for Guppy's small build trees. */
+static bool ext2_find_child_entry(vblk_t *dev, uint32_t dir_ino,
+                                  const char *name, uint32_t *ino_out,
+                                  uint8_t *type_out)
+{
     ext2_disk_layout_t lo;
     ext2_disk_inode_t dir;
-    if (!dev || !name || dir_ino == 0 || !ext2_read_layout(dev, &lo) ||
-        !ext2_read_inode_disk(dev, dir_ino, &dir)) return false;
-
-    uint8_t *blk = (uint8_t*)malloc(lo.block_size);
-    if (!blk) return false;
+    uint8_t *blk;
     bool found = false;
+
+    if (!dev || !name || !*name || !ext2_read_layout(dev, &lo) ||
+        !ext2_read_inode_disk(dev, dir_ino, &dir)) return false;
+    if ((dir.mode & VFS_S_IFMT) != VFS_S_IFDIR) return false;
+
+    blk = (uint8_t*)malloc(lo.block_size);
+    if (!blk) return false;
 
     for (int bi = 0; bi < 12 && dir.block[bi] && !found; ++bi) {
         if (!vblk_read_bytes(dev, (uint64_t)dir.block[bi] * lo.block_size,
@@ -158,14 +167,100 @@ static bool ext2_find_dir_entry(vblk_t *dev, uint32_t dir_ino, const char *name,
             off += rec;
         }
     }
+
     free(blk);
     return found;
 }
 
+static bool ext2_resolve_relpath(vblk_t *dev, const char *rel,
+                                 uint32_t *ino_out, uint8_t *type_out)
+{
+    char path[VFS_PATH_MAX];
+    char *p;
+    uint32_t ino = 2;
+    uint8_t type = 2;
+
+    if (!dev || !rel) return false;
+    if (rel[0] == '\0') {
+        if (ino_out) *ino_out = 2;
+        if (type_out) *type_out = 2;
+        return true;
+    }
+
+    snprintf(path, sizeof path, "%s", rel);
+    path[sizeof path - 1] = '\0';
+    p = path;
+
+    while (*p) {
+        char *slash = strchr(p, '/');
+        if (slash) *slash = '\0';
+        if (*p && strcmp(p, ".") != 0) {
+            if (!ext2_find_child_entry(dev, ino, p, &ino, &type)) return false;
+        }
+        if (!slash) break;
+        p = slash + 1;
+    }
+
+    if (ino_out) *ino_out = ino;
+    if (type_out) *type_out = type;
+    return true;
+}
+
+static bool ext2_write_mode_disk(vblk_t *dev, uint32_t ino, uint16_t mode)
+{
+    ext2_disk_layout_t lo;
+    char key[512];
+    uint64_t base = 0, len = 0;
+    uint8_t raw[2];
+
+    if (!dev || ino == 0 || !ext2_read_layout(dev, &lo)) return false;
+    if (!vblk_resolve_to_base(dev->name, key, sizeof key, &base, &len)) return false;
+
+    raw[0] = (uint8_t)(mode & 0xff);
+    raw[1] = (uint8_t)((mode >> 8) & 0xff);
+
+    uint64_t off = base
+                 + (uint64_t)lo.inode_table * lo.block_size
+                 + (uint64_t)(ino - 1u) * lo.inode_size;
+    (void)len;
+    return diskio_pwrite(key, off, raw, sizeof raw);
+}
+
 /* -------- mount state -------- */
 typedef struct ext2_fs {
-    vblk_t *dev;
+    vblk_t *dev;        /* reserved for future; helpers are global right now */
+    /* naive dir registry so lookup can find what we created via this driver */
+    char  **dirs;
+    size_t  ndirs, capdirs;
 } ext2_fs_t;
+
+static bool ext2_dirs_add(ext2_fs_t *fs, const char *rel) {
+    if (!fs || !rel) return false;
+    for (size_t i = 0; i < fs->ndirs; ++i)
+        if (strcmp(fs->dirs[i], rel) == 0) return true;
+    if (fs->ndirs == fs->capdirs) {
+        size_t nc = fs->capdirs ? fs->capdirs * 2 : 16;
+        char **nv = (char**)realloc(fs->dirs, nc * sizeof(char*));
+        if (!nv) return false;
+        fs->dirs = nv; fs->capdirs = nc;
+    }
+    fs->dirs[fs->ndirs] = xstrdup(rel);
+    if (!fs->dirs[fs->ndirs]) return false;
+    fs->ndirs++;
+    return true;
+}
+static bool ext2_dirs_has(ext2_fs_t *fs, const char *rel) {
+    if (!fs || !rel) return false;
+    for (size_t i = 0; i < fs->ndirs; ++i)
+        if (strcmp(fs->dirs[i], rel) == 0) return true;
+    return false;
+}
+static void ext2_dirs_free(ext2_fs_t *fs) {
+    if (!fs) return;
+    for (size_t i = 0; i < fs->ndirs; ++i) free(fs->dirs[i]);
+    free(fs->dirs);
+    fs->dirs = NULL; fs->ndirs = fs->capdirs = 0;
+}
 
 /* -------- inode/file priv payloads -------- */
 typedef struct ext2_inode_priv {
@@ -184,10 +279,11 @@ typedef struct ext2_file_priv {
 
 /* -------- super_ops -------- */
 static int s_statfs(struct superblock *sb, struct g_statvfs *sv) {
+    (void)sb;
     if (!sv) return -1;
     memset(sv, 0, sizeof *sv);
-    sv->f_bsize  = (sb && sb->block_size) ? sb->block_size : 1024;
-    sv->f_frsize = sv->f_bsize;
+    sv->f_bsize  = 4096;
+    sv->f_frsize = 4096;
     sv->f_namemax = 255;
     return 0;
 }
@@ -200,6 +296,7 @@ static void s_kill_sb(struct superblock *sb) {
         free(sb->root);
     }
     ext2_fs_t *fs = (ext2_fs_t*)sb->fs_private;
+    ext2_dirs_free(fs);
     free(fs);
     free(sb);
 }
@@ -225,18 +322,10 @@ static int f_release(struct file *f) {
                     fp->node->fs->dev->name);
                 rc = -1;
             } else {
-                int wrc;
-                if (f->f_inode && f->f_inode->i_ino != 0) {
-                    wrc = ext2_write_existing_at(key, off,
-                                                 fp->node->rel,
-                                                 fp->buf ? (const void*)fp->buf : (const void*)"",
-                                                 fp->len);
-                } else {
-                    wrc = ext2_create_and_write(key, off,
+                int wrc = ext2_create_and_write(key, off,
                                                 fp->node->rel,
                                                 fp->buf ? (const void*)fp->buf : (const void*)"",
                                                 fp->len);
-                }
                 DBG("ext2: flush '%s' key='%s' off=%llu len=%llu rc=%d",
                     fp->node->rel, key,
                     (unsigned long long)off,
@@ -265,48 +354,6 @@ static ssize_t f_write(struct file *f, const void *buf, size_t n, uint64_t *pos)
     fp->dirty = true;
     if (pos) *pos += n;
     return (ssize_t)n;
-}
-
-static bool ext2_file_data_block(vblk_t *dev,
-                                 const ext2_disk_layout_t *lo,
-                                 const ext2_disk_inode_t *di,
-                                 uint32_t logical_block,
-                                 uint32_t *disk_block_out)
-{
-    if (!dev || !lo || !di || !disk_block_out) return false;
-    const uint32_t ptrs = lo->block_size / 4u;
-    uint8_t raw[4096];
-    if (lo->block_size > sizeof raw) return false;
-
-    if (logical_block < 12u) {
-        *disk_block_out = di->block[logical_block];
-        return true;
-    }
-
-    logical_block -= 12u;
-    if (logical_block < ptrs) {
-        if (di->block[12] == 0) { *disk_block_out = 0; return true; }
-        if (!vblk_read_bytes(dev, (uint64_t)di->block[12] * lo->block_size,
-                             lo->block_size, raw)) return false;
-        *disk_block_out = rd32le(raw + logical_block * 4u);
-        return true;
-    }
-
-    logical_block -= ptrs;
-    if ((uint64_t)logical_block < (uint64_t)ptrs * ptrs) {
-        uint32_t outer = logical_block / ptrs;
-        uint32_t inner = logical_block % ptrs;
-        if (di->block[13] == 0) { *disk_block_out = 0; return true; }
-        if (!vblk_read_bytes(dev, (uint64_t)di->block[13] * lo->block_size,
-                             lo->block_size, raw)) return false;
-        uint32_t leaf = rd32le(raw + outer * 4u);
-        if (leaf == 0) { *disk_block_out = 0; return true; }
-        if (!vblk_read_bytes(dev, (uint64_t)leaf * lo->block_size,
-                             lo->block_size, raw)) return false;
-        *disk_block_out = rd32le(raw + inner * 4u);
-        return true;
-    }
-    return false;
 }
 
 static ssize_t f_read(struct file *f, void *buf, size_t n, uint64_t *pos) {
@@ -338,14 +385,12 @@ static ssize_t f_read(struct file *f, void *buf, size_t n, uint64_t *pos) {
         uint32_t logical_block = (uint32_t)(file_off / lo.block_size);
         uint32_t in_block = (uint32_t)(file_off % lo.block_size);
 
+        if (logical_block >= 12) break;
+
         size_t chunk = lo.block_size - in_block;
         if (chunk > n - done) chunk = n - done;
 
-        uint32_t disk_block = 0;
-        if (!ext2_file_data_block(fp->node->fs->dev, &lo, &di,
-                                  logical_block, &disk_block)) {
-            return done ? (ssize_t)done : -1;
-        }
+        uint32_t disk_block = di.block[logical_block];
         if (disk_block == 0) {
             memset(dst + done, 0, chunk);
         } else {
@@ -407,6 +452,9 @@ static ssize_t d_getdents64(struct file *f, void *buf, size_t bytes) {
     if (!f || !buf || bytes == 0) return -1;
     ext2_inode_priv_t *ip = (ext2_inode_priv_t*)f->private_data;
     if (!ip || !ip->is_dir || !ip->fs || !ip->fs->dev) return -1;
+
+    /* First implementation supports the mounted root directory. */
+    if (ip->rel && ip->rel[0] != '\0') return -1;
 
     ext2_disk_layout_t lo;
     ext2_disk_inode_t dirino;
@@ -501,21 +549,27 @@ static int i_getattr(struct inode *ino, struct g_stat *st) {
 }
 
 static int i_mkdir(struct inode *dir, const char *name, uint32_t mode) {
-    (void)mode; /* ext2 helpers ignore mode */
-    if (!dir || !name) return -1;
-    ext2_inode_priv_t *dp = (ext2_inode_priv_t*)dir->i_private;
-    if (!dp || !dp->fs) return -1;
-
+    ext2_inode_priv_t *dp;
     char full[VFS_PATH_MAX];
-    join_relpath(dp->rel ? dp->rel : "", name, full, sizeof full);
-
     char key[512];
     uint64_t off = 0, len = 0;
-    if (!dp->fs->dev ||
-        !vblk_resolve_to_base(dp->fs->dev->name, key, sizeof key, &off, &len)) {
+    uint16_t ext2_mode;
+
+    if (!dir || !name || !*name) return -1;
+    dp = (ext2_inode_priv_t*)dir->i_private;
+    if (!dp || !dp->fs || !dp->fs->dev || !dp->is_dir) return -1;
+
+    join_relpath(dp->rel ? dp->rel : "", name, full, sizeof full);
+
+    if (!vblk_resolve_to_base(dp->fs->dev->name, key, sizeof key, &off, &len))
         return -1;
-    }
-    if (ext2_mkdir_at(key, off, full, (uint16_t)(mode & 0777u)) != 0) return -1;
+    (void)len;
+
+    ext2_mode = (uint16_t)(mode & 07777u);
+    if (ext2_mode == 0) ext2_mode = 0755u;
+
+    if (ext2_mkdir_at(key, off, full, ext2_mode) != 0) return -1;
+    if (!ext2_dirs_add(dp->fs, full)) return -1;
     return 0;
 }
 
@@ -560,32 +614,52 @@ static int i_lookup(struct inode *dir, const char *name, struct inode **out) {
     char full[VFS_PATH_MAX];
     join_relpath(dp->rel ? dp->rel : "", name, full, sizeof full);
 
-    /* Persistent lookup works for any on-disk directory inode. */
-    uint32_t ino_num = 0;
-    uint8_t ft = 0;
-    if (dir->i_ino != 0 && ext2_find_dir_entry(dp->fs->dev, (uint32_t)dir->i_ino,
-                                               name, &ino_num, &ft)) {
-        ext2_disk_inode_t di;
-        if (!ext2_read_inode_disk(dp->fs->dev, ino_num, &di)) return -1;
+    /* Prefer the on-disk tree.  This makes files created earlier in the same
+     * script immediately visible to metadata operations such as chmod/stat. */
+    {
+        uint32_t ino_num = 0;
+        uint8_t ft = 0;
+        if (ext2_resolve_relpath(dp->fs->dev, full, &ino_num, &ft)) {
+            ext2_disk_inode_t di;
+            if (!ext2_read_inode_disk(dp->fs->dev, ino_num, &di)) return -1;
 
+            inode_t *ino = (inode_t*)calloc(1, sizeof *ino);
+            ext2_inode_priv_t *ip = (ext2_inode_priv_t*)calloc(1, sizeof *ip);
+            if (!ino || !ip) { free(ip); free(ino); return -1; }
+            ip->fs = dp->fs;
+            ip->is_dir = ((di.mode & VFS_S_IFMT) == VFS_S_IFDIR) || ft == 2;
+            ip->rel = xstrdup(full);
+            if (!ip->rel) { free(ip); free(ino); return -1; }
+
+            ino->i_ino = ino_num;
+            ino->i_mode = di.mode;
+            ino->i_size = di.size;
+            ino->i_atime = di.atime;
+            ino->i_ctime = di.ctime;
+            ino->i_mtime = di.mtime;
+            ino->i_nlink = di.links;
+            ino->i_sb = dir->i_sb;
+            ino->i_op = dir->i_op;
+            ino->i_fop = ip->is_dir ? &EXT2_FOPS_DIR : &EXT2_FOPS_FILE;
+            ino->i_private = ip;
+            if (out) *out = ino;
+            return 0;
+        }
+    }
+
+    /* Keep support for directories staged in the current mount session. */
+    if (ext2_dirs_has(dp->fs, full)) {
         inode_t *ino = (inode_t*)calloc(1, sizeof *ino);
         ext2_inode_priv_t *ip = (ext2_inode_priv_t*)calloc(1, sizeof *ip);
         if (!ino || !ip) { free(ip); free(ino); return -1; }
         ip->fs = dp->fs;
-        ip->is_dir = ((di.mode & VFS_S_IFMT) == VFS_S_IFDIR) || ft == 2;
+        ip->is_dir = true;
         ip->rel = xstrdup(full);
         if (!ip->rel) { free(ip); free(ino); return -1; }
-
-        ino->i_ino = ino_num;
-        ino->i_mode = di.mode;
-        ino->i_size = di.size;
-        ino->i_atime = di.atime;
-        ino->i_ctime = di.ctime;
-        ino->i_mtime = di.mtime;
-        ino->i_nlink = di.links;
+        ino->i_mode = VFS_S_IFDIR | VFS_MODE_DIR_0755;
         ino->i_sb = dir->i_sb;
         ino->i_op = dir->i_op;
-        ino->i_fop = ip->is_dir ? &EXT2_FOPS_DIR : &EXT2_FOPS_FILE;
+        ino->i_fop = &EXT2_FOPS_DIR;
         ino->i_private = ip;
         if (out) *out = ino;
         return 0;
@@ -595,37 +669,56 @@ static int i_lookup(struct inode *dir, const char *name, struct inode **out) {
 }
 
 static int i_readlink(struct inode *ino, char *buf, size_t bufsz) { (void)ino;(void)buf;(void)bufsz; return -1; }
-static int i_setattr(struct inode *ino, const void *attr) { (void)ino;(void)attr; return -1; }
-static int i_truncate(struct inode *ino, uint64_t size) {
-    if (!ino || size != 0) return -1;
-    ext2_inode_priv_t *ip = (ext2_inode_priv_t*)ino->i_private;
-    if (!ip || ip->is_dir || !ip->fs || !ip->fs->dev || !ip->rel) return -1;
+static int i_setattr(struct inode *ino, const void *attr) {
+    const uint32_t *modep = (const uint32_t*)attr;
+    uint32_t new_mode;
+    ext2_inode_priv_t *ip;
 
+    if (!ino || !modep || ino->i_ino == 0) return -1;
+    ip = (ext2_inode_priv_t*)ino->i_private;
+    if (!ip || !ip->fs || !ip->fs->dev) return -1;
+
+    new_mode = (ino->i_mode & VFS_S_IFMT) | (*modep & 07777u);
+    if (!ext2_write_mode_disk(ip->fs->dev, (uint32_t)ino->i_ino,
+                              (uint16_t)new_mode)) return -1;
+    ino->i_mode = new_mode;
+    return 0;
+}
+static int i_truncate(struct inode *ino, uint64_t size) {
+    ext2_inode_priv_t *ip;
     char key[512];
     uint64_t off = 0, len = 0;
+
+    if (!ino || size != 0) return -1;
+    ip = (ext2_inode_priv_t*)ino->i_private;
+    if (!ip || !ip->fs || !ip->fs->dev || !ip->rel) return -1;
+    if (ip->is_dir || VFS_S_ISDIR(ino->i_mode)) return -1;
+
     if (!vblk_resolve_to_base(ip->fs->dev->name, key, sizeof key, &off, &len))
         return -1;
     (void)len;
 
     if (ext2_truncate_at(key, off, ip->rel, 0) != 0) return -1;
     ino->i_size = 0;
-    ino->i_mtime = ino->i_ctime = (uint64_t)time(NULL);
     return 0;
 }
-static int i_unlink(struct inode *d, const char *n) {
-    if (!d || !n || !*n) return -1;
-    ext2_inode_priv_t *dp = (ext2_inode_priv_t*)d->i_private;
-    if (!dp || !dp->is_dir || !dp->fs || !dp->fs->dev) return -1;
 
-    char rel[VFS_PATH_MAX];
-    join_relpath(dp->rel, n, rel, sizeof rel);
-
+static int i_unlink(struct inode *dir, const char *name) {
+    ext2_inode_priv_t *dp;
+    char full[VFS_PATH_MAX];
     char key[512];
     uint64_t off = 0, len = 0;
+
+    if (!dir || !name || !*name) return -1;
+    dp = (ext2_inode_priv_t*)dir->i_private;
+    if (!dp || !dp->fs || !dp->fs->dev || !dp->is_dir) return -1;
+
+    join_relpath(dp->rel ? dp->rel : "", name, full, sizeof full);
     if (!vblk_resolve_to_base(dp->fs->dev->name, key, sizeof key, &off, &len))
         return -1;
     (void)len;
-    return ext2_unlink_at(key, off, rel);
+
+    return ext2_unlink_at(key, off, full) == 0 ? 0 : -1;
 }
 static int i_rename(struct inode *od, const char *on, struct inode *nd, const char *nn) { (void)od;(void)on;(void)nd;(void)nn; return -1; }
 static int i_symlink(struct inode *d, const char *n, const char *t) { (void)d;(void)n;(void)t; return -1; }
@@ -705,8 +798,11 @@ static int ext2_mount(vblk_t *dev, const char *opts, superblock_t **out_sb) {
     if (!fs) return -1;
     fs->dev = dev;
 
+    /* remember mount root "" so lookup can resolve relative children we create */
+    if (!ext2_dirs_add(fs, "")) { free(fs); return -1; }
+
     superblock_t *sb = (superblock_t*)calloc(1, sizeof *sb);
-    if (!sb) { free(fs); return -1; }
+    if (!sb) { ext2_dirs_free(fs); free(fs); return -1; }
 
     static const super_ops_t SOP = {
         .statfs  = s_statfs,
@@ -715,15 +811,15 @@ static int ext2_mount(vblk_t *dev, const char *opts, superblock_t **out_sb) {
     };
 
     inode_t *root = (inode_t*)calloc(1, sizeof *root);
-    if (!root) { free(sb); free(fs); return -1; }
+    if (!root) { free(sb); ext2_dirs_free(fs); free(fs); return -1; }
 
     ext2_inode_priv_t *rip = (ext2_inode_priv_t*)calloc(1, sizeof *rip);
-    if (!rip) { free(root); free(sb); free(fs); return -1; }
+    if (!rip) { free(root); free(sb); ext2_dirs_free(fs); free(fs); return -1; }
 
     rip->fs = fs;
     rip->is_dir = true;
     rip->rel = xstrdup("");
-    if (!rip->rel) { free(rip); free(root); free(sb); free(fs); return -1; }
+    if (!rip->rel) { free(rip); free(root); free(sb); ext2_dirs_free(fs); free(fs); return -1; }
 
     root->i_ino  = 2;                /* conventional ext2 root */
     root->i_mode = VFS_S_IFDIR | VFS_MODE_DIR_0755;
@@ -744,14 +840,7 @@ static int ext2_mount(vblk_t *dev, const char *opts, superblock_t **out_sb) {
 
     sb->fs_type    = NULL;
     sb->bdev       = dev;
-    {
-        ext2_disk_layout_t lo;
-        if (!ext2_read_layout(dev, &lo)) {
-            free(rip->rel); free(rip); free(root); free(sb); free(fs);
-            return -1;
-        }
-        sb->block_size = lo.block_size;
-    }
+    sb->block_size = 1024;
     sb->root       = root;
     sb->s_op       = &SOP;
     sb->fs_private = fs;

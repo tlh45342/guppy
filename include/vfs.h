@@ -213,3 +213,4 @@ ssize_t vfs_getdents64(struct file *f, void *buf, size_t bytes);
 /* ===== Metadata ===== */
 int     vfs_stat(const char *path, struct g_stat *st);
 int     vfs_statfs(const char *path, struct g_statvfs *svfs);
+int     vfs_chmod(const char *path, uint32_t mode);

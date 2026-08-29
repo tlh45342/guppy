@@ -162,5 +162,9 @@ clean:
 	@echo Cleaning build artifacts
 	-@$(RM_RF) "$(BUILD_DIR)" "$(BIN_DIR)"
 
+# --- version ---
+version:
+	guppy version
+
 # Include depfiles (safe if missing)
 -include $(DEPS)

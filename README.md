@@ -1,5 +1,7 @@
 # Guppy
 
+**Current version: 0.0.41**
+
 **Guppy** is a scriptable disk- and filesystem-image construction tool
 written in C. It is intended to make low-level image building practical
 from Windows, Linux, and macOS without requiring the host operating
@@ -27,7 +29,11 @@ construction.
 -   Raw writes to a device or partition.
 -   VFS mount routing and current-working-directory support, including
     relative paths.
+-   VFS metadata operations including `chmod` for changing file modes.
+-   `date` command for displaying the current date/time.
 -   EXT2 formatting and read/write support, including:
+    -   multi-group filesystem formatting and allocation;
+    -   group-aware inode and block allocation/reclamation;
     -   directory creation, lookup, enumeration, and metadata;
     -   regular-file creation and reads/writes;
     -   direct, single-indirect, and double-indirect block addressing;
@@ -116,6 +122,11 @@ separate.
 
   `stat`                              Metadata through `vfs_stat()`
 
+  `chmod`                             Change permissions/mode on a Guppy
+                                      VFS object
+
+  `date`                              Display the current date/time
+
   `cp`                                Guppy VFS -\> Guppy VFS copy;
                                       existing regular files are
                                       overwritten
@@ -172,6 +183,12 @@ cp /source/file /boot/file
 If `/boot/file` already exists, EXT2 truncates it, releases its old data
 and pointer blocks, and writes the replacement contents while retaining
 the existing inode.
+
+EXT2 permission bits can be changed through the VFS:
+
+``` text
+chmod 0755 /boot/file
+```
 
 Regular files can also be removed:
 
@@ -390,14 +407,31 @@ runner.
 
 ## Project Status
 
+### 0.0.41
+
+Version 0.0.41 adds the `date` and `chmod` commands and continues the
+EXT2/VFS work used by the current bootable-system-image project.
+
 Guppy is under active development. The VFS and filesystem layers are
 intentionally being advanced in small, testable rounds: make an
 operation correct, prove it against a real image, then build the next
 layer.
 
-Recent EXT2 work has established large regular-file I/O through
-double-indirect blocks, persistent removal, block/inode reclamation and
-reuse, and overwrite through real truncate semantics.
+Recent EXT2 work has established multi-group formatting and allocation,
+large regular-file I/O through double-indirect blocks, persistent removal,
+block/inode reclamation and reuse, overwrite through real truncate semantics,
+and VFS permission changes with `chmod`.
+
+As an independent interoperability check, a separately written x86 BIOS
+bootloader has successfully parsed a Guppy-created GPT disk, located the
+EXT2 root filesystem, traversed `/boot`, resolved direct, single-indirect,
+and double-indirect file blocks, and read file data. The same boot path has
+also located the Debian Linux kernel and initrd stored by Guppy and validated
+the Linux kernel boot header. This provides a useful independent check that
+the on-disk structures produced by Guppy are usable outside Guppy itself.
+
+Current bootable-image work is progressing from filesystem correctness into
+Linux kernel/initrd loading and boot-protocol handoff.
 
 Current areas of work include:
 

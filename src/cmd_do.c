@@ -53,7 +53,7 @@ int cmd_do(int argc, char **argv) {
         }
 
         if (rc != 0) {
-            printf("(rc=%d) — stopping script at %s:%d: %s\n",
+            printf("(rc=%d) - stopping script at %s:%d: %s\n",
                    rc, reading_stdin ? "<stdin>" : path, line_no, line);
             break;
         }
