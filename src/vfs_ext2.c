@@ -1,6 +1,6 @@
-// src/vfs_ext2.c — minimal EXT2 shim for the Guppy VFS
-// Supports: mount, mkdir, create+write (flush on close).
-// Not yet: readdir, file reads, stat fidelity.
+// src/vfs_ext2.c - EXT2 adapter for the Guppy VFS.
+// Provides mount, lookup, directory enumeration, metadata, file I/O,
+// creation, mkdir, chmod, truncate, and unlink through the VFS interfaces.
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -9,7 +9,6 @@
 #include <stdio.h>
 
 #include "vblk.h"
-#include "diskio.h"
 #include "debug.h"
 #include "vfs.h"
 #include "vfs_stat.h"
@@ -47,7 +46,11 @@ static void join_relpath(const char *parent, const char *name, char *out, size_t
 }
 
 
-/* -------- minimal on-disk EXT2 reader (single-group images for now) -------- */
+/* -------- VFS-side on-disk EXT2 metadata reader --------
+ * This compact reader currently caches the inode table from group 0.
+ * Inodes allocated in later block groups require group-aware descriptor lookup.
+ * See FUTURE.md.
+ */
 static uint16_t rd16le(const uint8_t *p) {
     return (uint16_t)(p[0] | ((uint16_t)p[1] << 8));
 }
@@ -209,27 +212,22 @@ static bool ext2_resolve_relpath(vblk_t *dev, const char *rel,
 static bool ext2_write_mode_disk(vblk_t *dev, uint32_t ino, uint16_t mode)
 {
     ext2_disk_layout_t lo;
-    char key[512];
-    uint64_t base = 0, len = 0;
     uint8_t raw[2];
 
     if (!dev || ino == 0 || !ext2_read_layout(dev, &lo)) return false;
-    if (!vblk_resolve_to_base(dev->name, key, sizeof key, &base, &len)) return false;
 
     raw[0] = (uint8_t)(mode & 0xff);
     raw[1] = (uint8_t)((mode >> 8) & 0xff);
 
-    uint64_t off = base
-                 + (uint64_t)lo.inode_table * lo.block_size
+    uint64_t off = (uint64_t)lo.inode_table * lo.block_size
                  + (uint64_t)(ino - 1u) * lo.inode_size;
-    (void)len;
-    return diskio_pwrite(key, off, raw, sizeof raw);
+    return vblk_write_bytes(dev, off, sizeof raw, raw);
 }
 
 /* -------- mount state -------- */
 typedef struct ext2_fs {
-    vblk_t *dev;        /* reserved for future; helpers are global right now */
-    /* naive dir registry so lookup can find what we created via this driver */
+    vblk_t *dev;        /* mounted backing virtual block device */
+    /* Mount-session directory cache retained as a compatibility fallback. */
     char  **dirs;
     size_t  ndirs, capdirs;
 } ext2_fs_t;
@@ -313,25 +311,14 @@ static int f_release(struct file *f) {
     if (fp) {
         if (fp->writable && fp->dirty &&
             fp->node && fp->node->rel && fp->node->fs && fp->node->fs->dev) {
-            char key[512];
-            uint64_t off = 0, len = 0;
-
-            if (!vblk_resolve_to_base(fp->node->fs->dev->name,
-                                      key, sizeof key, &off, &len)) {
-                DBG("ext2: cannot resolve backing store for '%s'",
-                    fp->node->fs->dev->name);
-                rc = -1;
-            } else {
-                int wrc = ext2_create_and_write(key, off,
-                                                fp->node->rel,
-                                                fp->buf ? (const void*)fp->buf : (const void*)"",
-                                                fp->len);
-                DBG("ext2: flush '%s' key='%s' off=%llu len=%llu rc=%d",
-                    fp->node->rel, key,
-                    (unsigned long long)off,
-                    (unsigned long long)fp->len, wrc);
-                if (wrc != 0) rc = -1;
-            }
+            int wrc = ext2_create_and_write(fp->node->fs->dev,
+                                            fp->node->rel,
+                                            fp->buf ? (const void*)fp->buf : (const void*)"",
+                                            fp->len);
+            DBG("ext2: flush '%s' dev='%s' len=%llu rc=%d",
+                fp->node->rel, fp->node->fs->dev->name,
+                (unsigned long long)fp->len, wrc);
+            if (wrc != 0) rc = -1;
         }
         free(fp->buf);
         free(fp);
@@ -453,8 +440,7 @@ static ssize_t d_getdents64(struct file *f, void *buf, size_t bytes) {
     ext2_inode_priv_t *ip = (ext2_inode_priv_t*)f->private_data;
     if (!ip || !ip->is_dir || !ip->fs || !ip->fs->dev) return -1;
 
-    /* First implementation supports the mounted root directory. */
-    if (ip->rel && ip->rel[0] != '\0') return -1;
+    /* Any directory inode can be enumerated; f_inode->i_ino identifies it. */
 
     ext2_disk_layout_t lo;
     ext2_disk_inode_t dirino;
@@ -551,8 +537,6 @@ static int i_getattr(struct inode *ino, struct g_stat *st) {
 static int i_mkdir(struct inode *dir, const char *name, uint32_t mode) {
     ext2_inode_priv_t *dp;
     char full[VFS_PATH_MAX];
-    char key[512];
-    uint64_t off = 0, len = 0;
     uint16_t ext2_mode;
 
     if (!dir || !name || !*name) return -1;
@@ -561,14 +545,10 @@ static int i_mkdir(struct inode *dir, const char *name, uint32_t mode) {
 
     join_relpath(dp->rel ? dp->rel : "", name, full, sizeof full);
 
-    if (!vblk_resolve_to_base(dp->fs->dev->name, key, sizeof key, &off, &len))
-        return -1;
-    (void)len;
-
     ext2_mode = (uint16_t)(mode & 07777u);
     if (ext2_mode == 0) ext2_mode = 0755u;
 
-    if (ext2_mkdir_at(key, off, full, ext2_mode) != 0) return -1;
+    if (ext2_mkdir_at(dp->fs->dev, full, ext2_mode) != 0) return -1;
     if (!ext2_dirs_add(dp->fs, full)) return -1;
     return 0;
 }
@@ -647,7 +627,7 @@ static int i_lookup(struct inode *dir, const char *name, struct inode **out) {
         }
     }
 
-    /* Keep support for directories staged in the current mount session. */
+    /* Compatibility fallback for directories staged in this mount session. */
     if (ext2_dirs_has(dp->fs, full)) {
         inode_t *ino = (inode_t*)calloc(1, sizeof *ino);
         ext2_inode_priv_t *ip = (ext2_inode_priv_t*)calloc(1, sizeof *ip);
@@ -686,19 +666,12 @@ static int i_setattr(struct inode *ino, const void *attr) {
 }
 static int i_truncate(struct inode *ino, uint64_t size) {
     ext2_inode_priv_t *ip;
-    char key[512];
-    uint64_t off = 0, len = 0;
-
     if (!ino || size != 0) return -1;
     ip = (ext2_inode_priv_t*)ino->i_private;
     if (!ip || !ip->fs || !ip->fs->dev || !ip->rel) return -1;
     if (ip->is_dir || VFS_S_ISDIR(ino->i_mode)) return -1;
 
-    if (!vblk_resolve_to_base(ip->fs->dev->name, key, sizeof key, &off, &len))
-        return -1;
-    (void)len;
-
-    if (ext2_truncate_at(key, off, ip->rel, 0) != 0) return -1;
+    if (ext2_truncate_at(ip->fs->dev, ip->rel, 0) != 0) return -1;
     ino->i_size = 0;
     return 0;
 }
@@ -706,19 +679,12 @@ static int i_truncate(struct inode *ino, uint64_t size) {
 static int i_unlink(struct inode *dir, const char *name) {
     ext2_inode_priv_t *dp;
     char full[VFS_PATH_MAX];
-    char key[512];
-    uint64_t off = 0, len = 0;
-
     if (!dir || !name || !*name) return -1;
     dp = (ext2_inode_priv_t*)dir->i_private;
     if (!dp || !dp->fs || !dp->fs->dev || !dp->is_dir) return -1;
 
     join_relpath(dp->rel ? dp->rel : "", name, full, sizeof full);
-    if (!vblk_resolve_to_base(dp->fs->dev->name, key, sizeof key, &off, &len))
-        return -1;
-    (void)len;
-
-    return ext2_unlink_at(key, off, full) == 0 ? 0 : -1;
+    return ext2_unlink_at(dp->fs->dev, full) == 0 ? 0 : -1;
 }
 static int i_rename(struct inode *od, const char *on, struct inode *nd, const char *nn) { (void)od;(void)on;(void)nd;(void)nn; return -1; }
 static int i_symlink(struct inode *d, const char *n, const char *t) { (void)d;(void)n;(void)t; return -1; }
@@ -840,7 +806,21 @@ static int ext2_mount(vblk_t *dev, const char *opts, superblock_t **out_sb) {
 
     sb->fs_type    = NULL;
     sb->bdev       = dev;
-    sb->block_size = 1024;
+
+    {
+        ext2_disk_layout_t lo;
+        if (!ext2_read_layout(dev, &lo)) {
+            free(rip->rel);
+            free(rip);
+            free(root);
+            free(sb);
+            ext2_dirs_free(fs);
+            free(fs);
+            return -1;
+        }
+        sb->block_size = lo.block_size;
+    }
+
     sb->root       = root;
     sb->s_op       = &SOP;
     sb->fs_private = fs;

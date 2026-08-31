@@ -1,4 +1,4 @@
-// guppy.c — CLI + REPL + script runner
+// guppy.c - CLI + REPL + script runner
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -50,7 +50,7 @@ static int handle_do(int argc, char **argv) {
 
         int this_rc = run_command_line(line);
         if (this_rc != 0) {
-            printf("(rc=%d) — stopping script at line: %s\n", this_rc, line);
+            printf("(rc=%d) - stopping script at line: %s\n", this_rc, line);
             rc = this_rc;
             break;
         }
@@ -76,7 +76,7 @@ static int repl_loop(void) {
         fflush(stdout);
 
         if (!fgets(line, sizeof line, stdin)) {
-            // EOF or error: don't silently exit—just continue or break cleanly
+            // EOF or error: don.t silently exit - just continue or break cleanly
             if (feof(stdin)) {
                 break;
             }
@@ -107,7 +107,7 @@ int main(int argc, char **argv) {
     /* DBG() is runtime-gated; this is silent while debug flags are zero. */
     (void)vfs_for_each_fs(_dumpfs, NULL);
 
-    // No arguments → REPL
+    // No arguments -> REPL
     if (argc <= 1) return repl_loop();
 
     // If first arg ends with .script, run it via the script runner.

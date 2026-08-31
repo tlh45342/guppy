@@ -1,4 +1,5 @@
 // src/blkdev.c
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,7 +9,6 @@
 #include "debug.h"
 #include "genhd.h"
 #include "vblk.h"
-#include "diskio.h"
 
 #define LSEC 512u
 #define MAX_PARTS 128
@@ -72,7 +72,7 @@ static uint32_t crc32_calc(const void *data, size_t len){
 
 /* ================================ I/O helpers ================================ */
 static inline int read_lba512(vblk_t *dev, uint64_t lba, void *buf, uint32_t cnt){
-    return vblk_read_blocks(dev, (uint32_t)lba, cnt, buf) ? 0 : -1;
+    return vblk_read_blocks(dev, lba, cnt, buf) ? 0 : -1;
 }
 static inline int read_bytes(vblk_t *dev, uint64_t off, uint32_t len, void *dst){
     return vblk_read_bytes(dev, off, len, dst) ? 0 : -1;
@@ -282,6 +282,8 @@ static int register_child(const vblk_t *parent, const char *parent_name,
     snprintf(child.fstype, sizeof child.fstype, "%s", ptable_kind ? ptable_kind : "-");
     child.lba_start = first_lba;
     child.lba_size  = last_lba - first_lba + 1;
+    child.block_bytes = parent->block_bytes ? parent->block_bytes : LSEC;
+    child.ro = parent->ro;
 
     int idx = vblk_register(&child);
     if (idx < 0) { fprintf(stderr, "partscan: registry full when adding %s\n", child.name); return -1; }
@@ -304,10 +306,10 @@ int disk_scan_partitions(struct gendisk *gd) {
     if (!pconst) { fprintf(stderr, "partscan: parent '%s' not found\n", gd->name); DBG("disk_scan_partitions: return -1 (parent not found)"); return -1; }
     vblk_t *parent = (vblk_t*)pconst;
 
-    const char *key = parent->dev[0] ? parent->dev : parent->name;
-    uint64_t size_bytes = diskio_size_bytes(key);
+    uint64_t size_bytes = vblk_size_bytes(parent);
     uint64_t total_lbas = size_bytes ? (size_bytes / (uint64_t)LSEC) : 0;
-    DBG("  devkey=%s size_bytes=%" PRIu64 " total_lbas=%" PRIu64, key, size_bytes, total_lbas);
+    DBG("  device=%s size_bytes=%" PRIu64 " total_lbas=%" PRIu64,
+        parent->name, size_bytes, total_lbas);
 
     uint64_t first[MAX_PARTS]={0}, last[MAX_PARTS]={0};
 
@@ -376,9 +378,9 @@ int add_disk(struct gendisk *gd) {
 }
 
 int del_disk(const char *name) {
-    (void)name;
-    DBG("del_disk('%s') (stub) -> return 0", name ? name : "(null)");
-    return 0;
+    DBG("del_disk('%s'): device removal is not implemented",
+        name ? name : "(null)");
+    return -1;
 }
 
 int block_rescan(const char *devname) {

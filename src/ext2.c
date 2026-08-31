@@ -1,5 +1,5 @@
 // --- BEGIN: minimal mkfs ext2 core ------------------------------------------
-#include "diskio.h"
+#include "vblk.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
@@ -96,12 +96,12 @@ typedef struct {
 #pragma pack(pop)
 
 /* Helpers */
-static bool pwrite_bytes_at(const char *key, uint64_t abs_off, const void *src, uint32_t len){
-    return diskio_pwrite(key, abs_off, src, len);
+static bool pwrite_bytes_at(vblk_t *dev, uint64_t abs_off, const void *src, uint32_t len){
+    return vblk_write_bytes(dev, abs_off, len, src);
 }
-static bool pwrite_block(const char *key, uint64_t fs_off, uint32_t block_size,
+static bool pwrite_block(vblk_t *dev, uint32_t block_size,
                          uint32_t block_index, const void *src, uint32_t len) {
-    return pwrite_bytes_at(key, fs_off + (uint64_t)block_index * block_size, src, len);
+    return pwrite_bytes_at(dev, (uint64_t)block_index * block_size, src, len);
 }
 
 static void set_bit(uint8_t *map, uint32_t idx) {
@@ -109,7 +109,7 @@ static void set_bit(uint8_t *map, uint32_t idx) {
 }
 
 /* Public mkfs entry point used by cmd_mkfs_ext2.c */
-int mkfs_ext2_core(const char *key, uint64_t off, uint64_t bytes, const char *label) {
+int mkfs_ext2_core(vblk_t *dev, uint64_t bytes, const char *label) {
     const uint32_t block_size = 4096u;
     const uint32_t blocks_per_group = block_size * 8u;   /* one bitmap block */
     const uint32_t inode_size = 128u;
@@ -215,12 +215,12 @@ int mkfs_ext2_core(const char *key, uint64_t off, uint64_t bytes, const char *la
 
         /* Clear metadata area, inode table, and root headroom. */
         for (uint32_t r = 0; r < data_rel + (g == 0 ? 1u : 0u); ++r) {
-            if (!pwrite_block(key, off, block_size, group_start + r, zero, sizeof zero)) {
+            if (!pwrite_block(dev, block_size, group_start + r, zero, sizeof zero)) {
                 free(gdt); return -1;
             }
         }
-        if (!pwrite_block(key, off, block_size, gdt[g].bg_block_bitmap, bb, sizeof bb) ||
-            !pwrite_block(key, off, block_size, gdt[g].bg_inode_bitmap, ib, sizeof ib)) {
+        if (!pwrite_block(dev, block_size, gdt[g].bg_block_bitmap, bb, sizeof bb) ||
+            !pwrite_block(dev, block_size, gdt[g].bg_inode_bitmap, ib, sizeof ib)) {
             free(gdt); return -1;
         }
     }
@@ -229,7 +229,7 @@ int mkfs_ext2_core(const char *key, uint64_t off, uint64_t bytes, const char *la
     sb.s_free_inodes_count = (uint32_t)total_free_inodes;
 
     /* Primary superblock is always at filesystem byte offset 1024. */
-    if (!pwrite_bytes_at(key, off + 1024u, &sb, sizeof sb)) { free(gdt); return -1; }
+    if (!pwrite_bytes_at(dev, 1024u, &sb, sizeof sb)) { free(gdt); return -1; }
 
     /* Write primary and backup superblock/GDT copies. */
     for (uint32_t g = 0; g < groups; ++g) {
@@ -237,7 +237,7 @@ int mkfs_ext2_core(const char *key, uint64_t off, uint64_t bytes, const char *la
         if (g != 0) {
             ext2_superblock backup = sb;
             backup.s_block_group_nr = (uint16_t)g;
-            if (!pwrite_block(key, off, block_size, group_start, &backup, sizeof backup)) {
+            if (!pwrite_block(dev, block_size, group_start, &backup, sizeof backup)) {
                 free(gdt); return -1;
             }
         }
@@ -247,7 +247,7 @@ int mkfs_ext2_core(const char *key, uint64_t off, uint64_t bytes, const char *la
             uint32_t count = groups - first;
             if (count > gd_per_block) count = gd_per_block;
             memcpy(gbuf, gdt + first, count * sizeof(ext2_group_desc));
-            if (!pwrite_block(key, off, block_size, group_start + 1u + k, gbuf, sizeof gbuf)) {
+            if (!pwrite_block(dev, block_size, group_start + 1u + k, gbuf, sizeof gbuf)) {
                 free(gdt); return -1;
             }
         }
@@ -269,7 +269,7 @@ int mkfs_ext2_core(const char *key, uint64_t off, uint64_t bytes, const char *la
     const uint32_t root_tbl_rel = root_index / inodes_per_block;
     const uint32_t root_tbl_off = (root_index % inodes_per_block) * inode_size;
     memcpy(itbuf + root_tbl_off, &root, sizeof root);
-    if (!pwrite_block(key, off, block_size, gdt[0].bg_inode_table + root_tbl_rel, itbuf, sizeof itbuf)) {
+    if (!pwrite_block(dev, block_size, gdt[0].bg_inode_table + root_tbl_rel, itbuf, sizeof itbuf)) {
         free(gdt); return -1;
     }
 
@@ -279,7 +279,7 @@ int mkfs_ext2_core(const char *key, uint64_t off, uint64_t bytes, const char *la
     ext2_dirent *dotdot = (ext2_dirent*)(dirblk + 12);
     dotdot->inode = 2; dotdot->rec_len = (uint16_t)(block_size - 12u);
     dotdot->name_len = 2; dotdot->file_type = 2; dotdot->name[0] = '.'; dotdot->name[1] = '.';
-    if (!pwrite_block(key, off, block_size, root_data_block, dirblk, sizeof dirblk)) {
+    if (!pwrite_block(dev, block_size, root_data_block, dirblk, sizeof dirblk)) {
         free(gdt); return -1;
     }
 
@@ -294,12 +294,12 @@ int mkfs_ext2_core(const char *key, uint64_t off, uint64_t bytes, const char *la
    - pwrite_bytes_at, pwrite_block
    Add this read helper:
 */
-static bool pread_bytes_at(const char *key, uint64_t abs_off, void *dst, uint32_t len){
-    return diskio_pread(key, abs_off, dst, len);
+static bool pread_bytes_at(vblk_t *dev, uint64_t abs_off, void *dst, uint32_t len){
+    return vblk_read_bytes(dev, abs_off, len, dst);
 }
-static bool pread_block(const char *key, uint64_t fs_off, uint32_t block_size,
+static bool pread_block(vblk_t *dev, uint32_t block_size,
                         uint32_t block_index, void *dst, uint32_t len){
-    return pread_bytes_at(key, fs_off + (uint64_t)block_index * block_size, dst, len);
+    return pread_bytes_at(dev, (uint64_t)block_index * block_size, dst, len);
 }
 
 static inline uint16_t dirent_min_rec_len(uint8_t name_len){
@@ -327,8 +327,8 @@ static uint32_t ext2_group_block_count(const ext2_meta *m, uint32_t g) {
     return (uint32_t)(left > m->sb.s_blocks_per_group ? m->sb.s_blocks_per_group : left);
 }
 
-static int ext2_store_meta(const char *key, uint64_t off, ext2_meta *m) {
-    if (!pwrite_bytes_at(key, off + 1024u, &m->sb, sizeof m->sb)) return -1;
+static int ext2_store_meta(vblk_t *dev, ext2_meta *m) {
+    if (!pwrite_bytes_at(dev, 1024u, &m->sb, sizeof m->sb)) return -1;
     const uint32_t per = m->block_size / (uint32_t)sizeof(ext2_group_desc);
     for (uint32_t k = 0; k < m->gdt_blocks; ++k) {
         uint8_t buf[4096]; memset(buf, 0, m->block_size);
@@ -336,15 +336,15 @@ static int ext2_store_meta(const char *key, uint64_t off, ext2_meta *m) {
         uint32_t count = m->group_count - first;
         if (count > per) count = per;
         memcpy(buf, &m->gd[first], count * sizeof(ext2_group_desc));
-        if (!pwrite_block(key, off, m->block_size, m->gdt_blk + k, buf, m->block_size)) return -2;
+        if (!pwrite_block(dev, m->block_size, m->gdt_blk + k, buf, m->block_size)) return -2;
     }
     return 0;
 }
 
-static int ext2_load_meta(const char *key, uint64_t off, ext2_meta *m) {
-    if (!key || !m) return -1;
+static int ext2_load_meta(vblk_t *dev, ext2_meta *m) {
+    if (!dev || !m) return -1;
     memset(m, 0, sizeof *m);
-    if (!pread_bytes_at(key, off + 1024, &m->sb, sizeof m->sb)) return -2;
+    if (!pread_bytes_at(dev, 1024, &m->sb, sizeof m->sb)) return -2;
     if (m->sb.s_magic != 0xEF53) return -3;
     m->block_size = 1024u << m->sb.s_log_block_size;
     if (m->block_size == 0 || m->block_size > 4096u) return -4;
@@ -360,7 +360,7 @@ static int ext2_load_meta(const char *key, uint64_t off, ext2_meta *m) {
         (m->sb.s_inodes_per_group * m->sb.s_inode_size + m->block_size - 1u) / m->block_size;
     for (uint32_t k = 0; k < m->gdt_blocks; ++k) {
         uint8_t buf[4096];
-        if (!pread_block(key, off, m->block_size, m->gdt_blk + k, buf, m->block_size)) return -7;
+        if (!pread_block(dev, m->block_size, m->gdt_blk + k, buf, m->block_size)) return -7;
         uint32_t first = k * per;
         uint32_t count = m->group_count - first;
         if (count > per) count = per;
@@ -369,9 +369,9 @@ static int ext2_load_meta(const char *key, uint64_t off, ext2_meta *m) {
     return 0;
 }
 
-static int ext2_read_inode_at(const char *key, uint64_t off, const ext2_meta *m,
+static int ext2_read_inode_at(vblk_t *dev, const ext2_meta *m,
                               uint32_t ino, ext2_inode *out) {
-    if (!key || !m || !out || ino == 0 || ino > m->sb.s_inodes_count) return -1;
+    if (!dev || !m || !out || ino == 0 || ino > m->sb.s_inodes_count) return -1;
     const uint32_t group = (ino - 1u) / m->sb.s_inodes_per_group;
     const uint32_t local = (ino - 1u) % m->sb.s_inodes_per_group;
     if (group >= m->group_count) return -2;
@@ -380,16 +380,16 @@ static int ext2_read_inode_at(const char *key, uint64_t off, const ext2_meta *m,
     const uint32_t tbl_rel_blk = local / inodes_per_block;
     const uint32_t tbl_off = (local % inodes_per_block) * m->sb.s_inode_size;
     uint8_t buf[4096];
-    if (!pread_block(key, off, m->block_size, m->gd[group].bg_inode_table + tbl_rel_blk,
+    if (!pread_block(dev, m->block_size, m->gd[group].bg_inode_table + tbl_rel_blk,
                      buf, m->block_size)) return -4;
     memset(out, 0, sizeof *out);
     memcpy(out, buf + tbl_off, sizeof *out);
     return 0;
 }
 
-static int ext2_write_inode_at(const char *key, uint64_t off, const ext2_meta *m,
+static int ext2_write_inode_at(vblk_t *dev, const ext2_meta *m,
                                uint32_t ino, const ext2_inode *in) {
-    if (!key || !m || !in || ino == 0 || ino > m->sb.s_inodes_count) return -1;
+    if (!dev || !m || !in || ino == 0 || ino > m->sb.s_inodes_count) return -1;
     const uint32_t group = (ino - 1u) / m->sb.s_inodes_per_group;
     const uint32_t local = (ino - 1u) % m->sb.s_inodes_per_group;
     if (group >= m->group_count) return -2;
@@ -398,27 +398,27 @@ static int ext2_write_inode_at(const char *key, uint64_t off, const ext2_meta *m
     const uint32_t tbl_rel_blk = local / inodes_per_block;
     const uint32_t tbl_off = (local % inodes_per_block) * m->sb.s_inode_size;
     uint8_t buf[4096];
-    if (!pread_block(key, off, m->block_size, m->gd[group].bg_inode_table + tbl_rel_blk,
+    if (!pread_block(dev, m->block_size, m->gd[group].bg_inode_table + tbl_rel_blk,
                      buf, m->block_size)) return -4;
     memcpy(buf + tbl_off, in, sizeof *in);
-    if (!pwrite_block(key, off, m->block_size, m->gd[group].bg_inode_table + tbl_rel_blk,
+    if (!pwrite_block(dev, m->block_size, m->gd[group].bg_inode_table + tbl_rel_blk,
                       buf, m->block_size)) return -5;
     return 0;
 }
 
-static int ext2_find_entry_at(const char *key, uint64_t off, const ext2_meta *m,
+static int ext2_find_entry_at(vblk_t *dev, const ext2_meta *m,
                               uint32_t dir_ino, const char *name,
                               uint32_t *ino_out, uint8_t *type_out) {
-    if (!key || !m || !name || !*name) return -1;
+    if (!dev || !m || !name || !*name) return -1;
     ext2_inode dir;
-    if (ext2_read_inode_at(key, off, m, dir_ino, &dir) != 0) return -2;
+    if (ext2_read_inode_at(dev, m, dir_ino, &dir) != 0) return -2;
     if ((dir.i_mode & 0170000) != 0040000) return -3;
     size_t want = strlen(name);
     if (want > 255u) return -4;
     uint8_t blk[4096];
     if (m->block_size > sizeof blk) return -5;
     for (int bi = 0; bi < 12 && dir.i_block[bi]; ++bi) {
-        if (!pread_block(key, off, m->block_size, dir.i_block[bi], blk, m->block_size)) return -6;
+        if (!pread_block(dev, m->block_size, dir.i_block[bi], blk, m->block_size)) return -6;
         uint32_t pos = 0;
         while (pos + 8u <= m->block_size) {
             ext2_dirent *de = (ext2_dirent*)(blk + pos);
@@ -435,9 +435,9 @@ static int ext2_find_entry_at(const char *key, uint64_t off, const ext2_meta *m,
     return 0;
 }
 
-static int ext2_resolve_path_at(const char *key, uint64_t off, const ext2_meta *m,
+static int ext2_resolve_path_at(vblk_t *dev, const ext2_meta *m,
                                 const char *path, uint32_t *ino_out) {
-    if (!key || !m || !path || !ino_out) return -1;
+    if (!dev || !m || !path || !ino_out) return -1;
     while (*path == '/') path++;
     if (*path == '\0') { *ino_out = 2; return 0; }
 
@@ -454,7 +454,7 @@ static int ext2_resolve_path_at(const char *key, uint64_t off, const ext2_meta *
         char *slash = strchr(p, '/');
         if (slash) *slash = '\0';
         uint32_t next = 0;
-        int frc = ext2_find_entry_at(key, off, m, cur, p, &next, NULL);
+        int frc = ext2_find_entry_at(dev, m, cur, p, &next, NULL);
         if (frc != 1) return -3;
         cur = next;
         if (!slash) break;
@@ -489,21 +489,21 @@ static int split_parent_name(const char *path, char *parent, size_t pcap,
 }
 
 
-static uint32_t ext2_alloc_inode(const char *key, uint64_t off, ext2_meta *m) {
+static uint32_t ext2_alloc_inode(vblk_t *dev, ext2_meta *m) {
     uint8_t ib[4096];
     for (uint32_t g = 0; g < m->group_count; ++g) {
         if (!m->gd[g].bg_free_inodes_count) continue;
-        if (!pread_block(key, off, m->block_size, m->gd[g].bg_inode_bitmap, ib, m->block_size)) return 0;
+        if (!pread_block(dev, m->block_size, m->gd[g].bg_inode_bitmap, ib, m->block_size)) return 0;
         for (uint32_t local = 0; local < m->sb.s_inodes_per_group; ++local) {
             uint32_t ino = g * m->sb.s_inodes_per_group + local + 1u;
             if (ino > m->sb.s_inodes_count) break;
             if (ino < m->sb.s_first_ino && ino != 2u) continue;
             if (!(ib[local >> 3] & (uint8_t)(1u << (local & 7u)))) {
                 ib[local >> 3] |= (uint8_t)(1u << (local & 7u));
-                if (!pwrite_block(key, off, m->block_size, m->gd[g].bg_inode_bitmap, ib, m->block_size)) return 0;
+                if (!pwrite_block(dev, m->block_size, m->gd[g].bg_inode_bitmap, ib, m->block_size)) return 0;
                 if (m->gd[g].bg_free_inodes_count) m->gd[g].bg_free_inodes_count--;
                 if (m->sb.s_free_inodes_count) m->sb.s_free_inodes_count--;
-                if (ext2_store_meta(key, off, m) != 0) return 0;
+                if (ext2_store_meta(dev, m) != 0) return 0;
                 return ino;
             }
         }
@@ -511,36 +511,36 @@ static uint32_t ext2_alloc_inode(const char *key, uint64_t off, ext2_meta *m) {
     return 0;
 }
 
-static int ext2_free_inode_num(const char *key, uint64_t off, ext2_meta *m, uint32_t ino) {
+static int ext2_free_inode_num(vblk_t *dev, ext2_meta *m, uint32_t ino) {
     if (!ino || ino > m->sb.s_inodes_count) return -1;
     uint32_t g = (ino - 1u) / m->sb.s_inodes_per_group;
     uint32_t local = (ino - 1u) % m->sb.s_inodes_per_group;
     uint8_t ib[4096];
-    if (!pread_block(key, off, m->block_size, m->gd[g].bg_inode_bitmap, ib, m->block_size)) return -2;
+    if (!pread_block(dev, m->block_size, m->gd[g].bg_inode_bitmap, ib, m->block_size)) return -2;
     uint8_t mask = (uint8_t)(1u << (local & 7u));
     if (ib[local >> 3] & mask) {
         ib[local >> 3] &= (uint8_t)~mask;
-        if (!pwrite_block(key, off, m->block_size, m->gd[g].bg_inode_bitmap, ib, m->block_size)) return -3;
+        if (!pwrite_block(dev, m->block_size, m->gd[g].bg_inode_bitmap, ib, m->block_size)) return -3;
         m->gd[g].bg_free_inodes_count++;
         m->sb.s_free_inodes_count++;
-        if (ext2_store_meta(key, off, m) != 0) return -4;
+        if (ext2_store_meta(dev, m) != 0) return -4;
     }
     return 0;
 }
 
-static uint32_t ext2_alloc_block(const char *key, uint64_t off, ext2_meta *m) {
+static uint32_t ext2_alloc_block(vblk_t *dev, ext2_meta *m) {
     uint8_t bb[4096];
     for (uint32_t g = 0; g < m->group_count; ++g) {
         if (!m->gd[g].bg_free_blocks_count) continue;
-        if (!pread_block(key, off, m->block_size, m->gd[g].bg_block_bitmap, bb, m->block_size)) return 0;
+        if (!pread_block(dev, m->block_size, m->gd[g].bg_block_bitmap, bb, m->block_size)) return 0;
         uint32_t group_blocks = ext2_group_block_count(m, g);
         for (uint32_t local = 0; local < group_blocks; ++local) {
             if (!(bb[local >> 3] & (uint8_t)(1u << (local & 7u)))) {
                 bb[local >> 3] |= (uint8_t)(1u << (local & 7u));
-                if (!pwrite_block(key, off, m->block_size, m->gd[g].bg_block_bitmap, bb, m->block_size)) return 0;
+                if (!pwrite_block(dev, m->block_size, m->gd[g].bg_block_bitmap, bb, m->block_size)) return 0;
                 if (m->gd[g].bg_free_blocks_count) m->gd[g].bg_free_blocks_count--;
                 if (m->sb.s_free_blocks_count) m->sb.s_free_blocks_count--;
-                if (ext2_store_meta(key, off, m) != 0) return 0;
+                if (ext2_store_meta(dev, m) != 0) return 0;
                 return g * m->sb.s_blocks_per_group + local;
             }
         }
@@ -586,15 +586,15 @@ static void ext2_alloc_ctx_destroy(ext2_alloc_ctx *ctx) {
     memset(ctx, 0, sizeof *ctx);
 }
 
-static uint32_t ext2_alloc_block_ctx(const char *key, uint64_t off,
+static uint32_t ext2_alloc_block_ctx(vblk_t *dev,
                                      ext2_meta *m, ext2_alloc_ctx *ctx) {
-    if (!key || !m || !ctx) return 0;
+    if (!dev || !m || !ctx) return 0;
     for (uint32_t g = 0; g < m->group_count; ++g) {
         if (!m->gd[g].bg_free_blocks_count) continue;
 
         uint8_t *bb = ctx->bitmaps + (size_t)g * m->block_size;
         if (!ctx->loaded[g]) {
-            if (!pread_block(key, off, m->block_size,
+            if (!pread_block(dev, m->block_size,
                              m->gd[g].bg_block_bitmap, bb, m->block_size)) return 0;
             ctx->loaded[g] = 1;
         }
@@ -618,23 +618,23 @@ static uint32_t ext2_alloc_block_ctx(const char *key, uint64_t off,
     return 0;
 }
 
-static int ext2_alloc_ctx_commit(const char *key, uint64_t off,
+static int ext2_alloc_ctx_commit(vblk_t *dev,
                                  ext2_meta *m, ext2_alloc_ctx *ctx) {
-    if (!key || !m || !ctx) return -1;
+    if (!dev || !m || !ctx) return -1;
     for (uint32_t g = 0; g < m->group_count; ++g) {
         if (!ctx->dirty[g]) continue;
         uint8_t *bb = ctx->bitmaps + (size_t)g * m->block_size;
-        if (!pwrite_block(key, off, m->block_size,
+        if (!pwrite_block(dev, m->block_size,
                           m->gd[g].bg_block_bitmap, bb, m->block_size)) return -2;
     }
-    return ext2_store_meta(key, off, m);
+    return ext2_store_meta(dev, m);
 }
 
 /* Write a regular file's data using maximal physically-contiguous runs.
    The allocator normally hands out sequential blocks; indirect metadata blocks
    create only occasional gaps.  Coalescing the data blocks turns thousands of
    fopen/seek/write/close cycles in diskio into a small number of large writes. */
-static int ext2_write_data_runs(const char *key, uint64_t off, const ext2_meta *m,
+static int ext2_write_data_runs(vblk_t *dev, const ext2_meta *m,
                                 const void *data, size_t len,
                                 const uint32_t *blocks, uint64_t count) {
     if ((!data && len) || (!blocks && count)) return -1;
@@ -649,13 +649,13 @@ static int ext2_write_data_runs(const char *key, uint64_t off, const ext2_meta *
         const uint64_t capacity = (j - i) * (uint64_t)m->block_size;
         uint64_t actual = (file_pos < len) ? (uint64_t)len - file_pos : 0;
         if (actual > capacity) actual = capacity;
-        uint64_t abs = off + (uint64_t)blocks[i] * m->block_size;
+        uint64_t abs = (uint64_t)blocks[i] * m->block_size;
         uint64_t done = 0;
         while (done < actual) {
             uint64_t left = actual - done;
             uint32_t chunk = (left > (64u * 1024u * 1024u))
                            ? (64u * 1024u * 1024u) : (uint32_t)left;
-            if (!pwrite_bytes_at(key, abs + done, src + file_pos + done, chunk)) return -2;
+            if (!pwrite_bytes_at(dev, abs + done, src + file_pos + done, chunk)) return -2;
             done += chunk;
         }
         if (actual < capacity) {
@@ -663,7 +663,7 @@ static int ext2_write_data_runs(const char *key, uint64_t off, const ext2_meta *
             uint64_t tail = capacity - actual;
             while (tail) {
                 uint32_t chunk = tail > sizeof zero ? (uint32_t)sizeof zero : (uint32_t)tail;
-                if (!pwrite_bytes_at(key, abs + actual, zero, chunk)) return -3;
+                if (!pwrite_bytes_at(dev, abs + actual, zero, chunk)) return -3;
                 actual += chunk;
                 tail -= chunk;
             }
@@ -673,7 +673,7 @@ static int ext2_write_data_runs(const char *key, uint64_t off, const ext2_meta *
     return 0;
 }
 
-static int ext2_free_block_ctx(const char *key, uint64_t off,
+static int ext2_free_block_ctx(vblk_t *dev,
                                ext2_meta *m, ext2_alloc_ctx *ctx, uint32_t block) {
     if (!block || block >= m->sb.s_blocks_count) return -1;
     const uint32_t g = block / m->sb.s_blocks_per_group;
@@ -681,7 +681,7 @@ static int ext2_free_block_ctx(const char *key, uint64_t off,
     if (g >= m->group_count) return -2;
     uint8_t *bb = ctx->bitmaps + (size_t)g * m->block_size;
     if (!ctx->loaded[g]) {
-        if (!pread_block(key, off, m->block_size,
+        if (!pread_block(dev, m->block_size,
                          m->gd[g].bg_block_bitmap, bb, m->block_size)) return -3;
         ctx->loaded[g] = 1;
     }
@@ -697,18 +697,18 @@ static int ext2_free_block_ctx(const char *key, uint64_t off,
 
 /* Insert a directory entry. If all existing direct blocks are full, allocate
    one additional directory block from the filesystem. */
-static int ext2_append_dirent_at(const char *key, uint64_t off, ext2_meta *m,
+static int ext2_append_dirent_at(vblk_t *dev, ext2_meta *m,
                                  uint32_t dir_ino, uint32_t child_ino,
                                  uint8_t file_type, const char *name) {
     ext2_inode dir;
-    if (ext2_read_inode_at(key, off, m, dir_ino, &dir) != 0) return -1;
+    if (ext2_read_inode_at(dev, m, dir_ino, &dir) != 0) return -1;
     if ((dir.i_mode & 0170000) != 0040000) return -2;
     uint8_t nl = (uint8_t)strlen(name);
     uint16_t need = dirent_min_rec_len(nl);
     uint8_t blk[4096];
 
     for (int bi = 0; bi < 12 && dir.i_block[bi]; ++bi) {
-        if (!pread_block(key, off, m->block_size, dir.i_block[bi], blk, m->block_size)) return -4;
+        if (!pread_block(dev, m->block_size, dir.i_block[bi], blk, m->block_size)) return -4;
         uint32_t pos = 0;
         while (pos + 8u <= m->block_size) {
             ext2_dirent *de = (ext2_dirent*)(blk + pos);
@@ -724,9 +724,9 @@ static int ext2_append_dirent_at(const char *key, uint64_t off, ext2_meta *m,
                 ne->name_len = nl;
                 ne->file_type = file_type;
                 memcpy(ne->name, name, nl);
-                if (!pwrite_block(key, off, m->block_size, dir.i_block[bi], blk, m->block_size)) return -5;
+                if (!pwrite_block(dev, m->block_size, dir.i_block[bi], blk, m->block_size)) return -5;
                 dir.i_mtime = dir.i_ctime = (uint32_t)time(NULL);
-                return ext2_write_inode_at(key, off, m, dir_ino, &dir);
+                return ext2_write_inode_at(dev, m, dir_ino, &dir);
             }
             pos += de->rec_len;
         }
@@ -735,7 +735,7 @@ static int ext2_append_dirent_at(const char *key, uint64_t off, ext2_meta *m,
     int slot = -1;
     for (int bi = 0; bi < 12; ++bi) if (dir.i_block[bi] == 0) { slot = bi; break; }
     if (slot < 0) return -6;
-    uint32_t extra = ext2_alloc_block(key, off, m);
+    uint32_t extra = ext2_alloc_block(dev, m);
     if (!extra) return -7;
     memset(blk, 0, m->block_size);
     ext2_dirent *ne = (ext2_dirent*)blk;
@@ -744,37 +744,37 @@ static int ext2_append_dirent_at(const char *key, uint64_t off, ext2_meta *m,
     ne->name_len = nl;
     ne->file_type = file_type;
     memcpy(ne->name, name, nl);
-    if (!pwrite_block(key, off, m->block_size, extra, blk, m->block_size)) return -8;
+    if (!pwrite_block(dev, m->block_size, extra, blk, m->block_size)) return -8;
     dir.i_block[slot] = extra;
     dir.i_size += m->block_size;
     dir.i_blocks += m->block_size / 512u;
     dir.i_mtime = dir.i_ctime = (uint32_t)time(NULL);
-    if (ext2_write_inode_at(key, off, m, dir_ino, &dir) != 0) return -9;
+    if (ext2_write_inode_at(dev, m, dir_ino, &dir) != 0) return -9;
     return 1;
 }
 
-int ext2_mkdir_at(const char *key, uint64_t off, const char *path, uint16_t mode) {
+int ext2_mkdir_at(vblk_t *dev, const char *path, uint16_t mode) {
     ext2_meta m;
-    int rc = ext2_load_meta(key, off, &m);
+    int rc = ext2_load_meta(dev, &m);
     if (rc != 0) return -10 + rc;
 
     char parent[512], name[256];
     if (split_parent_name(path, parent, sizeof parent, name, sizeof name) != 0) return -20;
     uint32_t parent_ino = 0;
-    if (ext2_resolve_path_at(key, off, &m, parent, &parent_ino) != 0) return -21;
+    if (ext2_resolve_path_at(dev, &m, parent, &parent_ino) != 0) return -21;
 
     uint32_t existing = 0;
-    int exists = ext2_find_entry_at(key, off, &m, parent_ino, name, &existing, NULL);
+    int exists = ext2_find_entry_at(dev, &m, parent_ino, name, &existing, NULL);
     if (exists == 1) {
         ext2_inode ei;
-        if (ext2_read_inode_at(key, off, &m, existing, &ei) == 0 && (ei.i_mode & 0170000) == 0040000) return 0;
+        if (ext2_read_inode_at(dev, &m, existing, &ei) == 0 && (ei.i_mode & 0170000) == 0040000) return 0;
         return -22;
     }
     if (exists < 0) return -23;
 
-    uint32_t ino = ext2_alloc_inode(key, off, &m);
+    uint32_t ino = ext2_alloc_inode(dev, &m);
     if (!ino) return -24;
-    uint32_t data_blk = ext2_alloc_block(key, off, &m);
+    uint32_t data_blk = ext2_alloc_block(dev, &m);
     if (!data_blk) return -25;
 
     ext2_inode child; memset(&child, 0, sizeof child);
@@ -784,7 +784,7 @@ int ext2_mkdir_at(const char *key, uint64_t off, const char *path, uint16_t mode
     child.i_links_count = 2;
     child.i_blocks = m.block_size / 512u;
     child.i_block[0] = data_blk;
-    if (ext2_write_inode_at(key, off, &m, ino, &child) != 0) return -26;
+    if (ext2_write_inode_at(dev, &m, ino, &child) != 0) return -26;
 
     uint8_t dirblk[4096]; memset(dirblk, 0, m.block_size);
     ext2_dirent *dot = (ext2_dirent*)dirblk;
@@ -792,24 +792,24 @@ int ext2_mkdir_at(const char *key, uint64_t off, const char *path, uint16_t mode
     ext2_dirent *dotdot = (ext2_dirent*)(dirblk + 12);
     dotdot->inode = parent_ino; dotdot->rec_len = (uint16_t)(m.block_size - 12u);
     dotdot->name_len = 2; dotdot->file_type = 2; dotdot->name[0] = '.'; dotdot->name[1] = '.';
-    if (!pwrite_block(key, off, m.block_size, data_blk, dirblk, m.block_size)) return -27;
+    if (!pwrite_block(dev, m.block_size, data_blk, dirblk, m.block_size)) return -27;
 
-    if (ext2_append_dirent_at(key, off, &m, parent_ino, ino, 2, name) < 0) return -28;
+    if (ext2_append_dirent_at(dev, &m, parent_ino, ino, 2, name) < 0) return -28;
 
     ext2_inode parent_inode;
-    if (ext2_read_inode_at(key, off, &m, parent_ino, &parent_inode) != 0) return -29;
+    if (ext2_read_inode_at(dev, &m, parent_ino, &parent_inode) != 0) return -29;
     parent_inode.i_links_count++;
     parent_inode.i_mtime = parent_inode.i_ctime = (uint32_t)time(NULL);
-    if (ext2_write_inode_at(key, off, &m, parent_ino, &parent_inode) != 0) return -30;
+    if (ext2_write_inode_at(dev, &m, parent_ino, &parent_inode) != 0) return -30;
 
     uint32_t ig = (ino - 1u) / m.sb.s_inodes_per_group;
     m.gd[ig].bg_used_dirs_count++;
-    return ext2_store_meta(key, off, &m);
+    return ext2_store_meta(dev, &m);
 }
 
-static int ext2_free_inode_data_blocks(const char *key, uint64_t off,
+static int ext2_free_inode_data_blocks(vblk_t *dev,
                                        ext2_meta *m, const ext2_inode *file) {
-    if (file->i_block[14]) return -1; /* future triple-indirect / large-file support */
+    if (file->i_block[14]) return -1; /* triple-indirect addressing is outside the current scope; see FUTURE.md */
     const uint32_t ptrs = m->block_size / 4u;
     uint8_t ptrblk[4096];
     ext2_alloc_ctx fctx;
@@ -817,7 +817,7 @@ static int ext2_free_inode_data_blocks(const char *key, uint64_t off,
     int rc = 0;
 
 #define FREE_CTX_BLOCK(block_, code_) do { \
-        if ((block_) && ext2_free_block_ctx(key, off, m, &fctx, (block_)) != 0) { \
+        if ((block_) && ext2_free_block_ctx(dev, m, &fctx, (block_)) != 0) { \
             rc = (code_); goto out; \
         } \
     } while (0)
@@ -825,7 +825,7 @@ static int ext2_free_inode_data_blocks(const char *key, uint64_t off,
     for (int i = 0; i < 12; ++i) FREE_CTX_BLOCK(file->i_block[i], -3);
 
     if (file->i_block[12]) {
-        if (!pread_block(key, off, m->block_size, file->i_block[12], ptrblk, m->block_size)) {
+        if (!pread_block(dev, m->block_size, file->i_block[12], ptrblk, m->block_size)) {
             rc = -4; goto out;
         }
         for (uint32_t i = 0; i < ptrs; ++i) {
@@ -836,14 +836,14 @@ static int ext2_free_inode_data_blocks(const char *key, uint64_t off,
     }
 
     if (file->i_block[13]) {
-        if (!pread_block(key, off, m->block_size, file->i_block[13], ptrblk, m->block_size)) {
+        if (!pread_block(dev, m->block_size, file->i_block[13], ptrblk, m->block_size)) {
             rc = -7; goto out;
         }
         for (uint32_t i = 0; i < ptrs; ++i) {
             uint32_t leaf = ((uint32_t*)ptrblk)[i];
             if (!leaf) continue;
             uint8_t leafblk[4096];
-            if (!pread_block(key, off, m->block_size, leaf, leafblk, m->block_size)) {
+            if (!pread_block(dev, m->block_size, leaf, leafblk, m->block_size)) {
                 rc = -8; goto out;
             }
             for (uint32_t j = 0; j < ptrs; ++j) {
@@ -855,7 +855,7 @@ static int ext2_free_inode_data_blocks(const char *key, uint64_t off,
         FREE_CTX_BLOCK(file->i_block[13], -11);
     }
 
-    if (ext2_alloc_ctx_commit(key, off, m, &fctx) != 0) rc = -12;
+    if (ext2_alloc_ctx_commit(dev, m, &fctx) != 0) rc = -12;
 
 out:
     ext2_alloc_ctx_destroy(&fctx);
@@ -864,33 +864,33 @@ out:
 #undef FREE_CTX_BLOCK
 }
 
-/* Remove a regular file from this single-group EXT2 image.
+/* Remove a regular file from an EXT2 image.
    Frees direct, single-indirect, and double-indirect data/metadata blocks,
    clears the inode bitmap, removes the parent directory entry, and repairs
    free-space counters. Directories are deliberately rejected; rmdir is a
    separate operation. */
-int ext2_unlink_at(const char *key, uint64_t off, const char *path)
+int ext2_unlink_at(vblk_t *dev, const char *path)
 {
     ext2_meta m;
-    if (!key || !path) return -1;
-    if (ext2_load_meta(key, off, &m) != 0) return -2;
+    if (!dev || !path) return -1;
+    if (ext2_load_meta(dev, &m) != 0) return -2;
     char parent[512], name[256];
     if (split_parent_name(path, parent, sizeof parent, name, sizeof name) != 0) return -3;
     if (!strcmp(name, ".") || !strcmp(name, "..")) return -4;
 
     uint32_t parent_ino = 0, ino = 0; uint8_t type = 0;
-    if (ext2_resolve_path_at(key, off, &m, parent, &parent_ino) != 0) return -5;
-    if (ext2_find_entry_at(key, off, &m, parent_ino, name, &ino, &type) != 1 || !ino) return -6;
+    if (ext2_resolve_path_at(dev, &m, parent, &parent_ino) != 0) return -5;
+    if (ext2_find_entry_at(dev, &m, parent_ino, name, &ino, &type) != 1 || !ino) return -6;
     ext2_inode victim;
-    if (ext2_read_inode_at(key, off, &m, ino, &victim) != 0) return -7;
+    if (ext2_read_inode_at(dev, &m, ino, &victim) != 0) return -7;
     if ((victim.i_mode & 0170000) == 0040000 || type == 2) return -8;
     if (victim.i_block[14]) return -9;
 
     ext2_inode pdir;
-    if (ext2_read_inode_at(key, off, &m, parent_ino, &pdir) != 0) return -10;
+    if (ext2_read_inode_at(dev, &m, parent_ino, &pdir) != 0) return -10;
     uint8_t blk[4096]; bool removed = false; size_t want = strlen(name);
     for (int bi = 0; bi < 12 && pdir.i_block[bi] && !removed; ++bi) {
-        if (!pread_block(key, off, m.block_size, pdir.i_block[bi], blk, m.block_size)) return -11;
+        if (!pread_block(dev, m.block_size, pdir.i_block[bi], blk, m.block_size)) return -11;
         uint32_t pos = 0, prev = UINT32_MAX;
         while (pos + 8u <= m.block_size) {
             ext2_dirent *de = (ext2_dirent*)(blk + pos);
@@ -898,59 +898,59 @@ int ext2_unlink_at(const char *key, uint64_t off, const char *path)
             if (de->inode && de->name_len == want && memcmp(de->name, name, want) == 0) {
                 if (prev != UINT32_MAX) ((ext2_dirent*)(blk + prev))->rec_len += de->rec_len;
                 else de->inode = 0;
-                if (!pwrite_block(key, off, m.block_size, pdir.i_block[bi], blk, m.block_size)) return -12;
+                if (!pwrite_block(dev, m.block_size, pdir.i_block[bi], blk, m.block_size)) return -12;
                 removed = true; break;
             }
             prev = pos; pos += de->rec_len;
         }
     }
     if (!removed) return -13;
-    if (ext2_free_inode_data_blocks(key, off, &m, &victim) != 0) return -14;
+    if (ext2_free_inode_data_blocks(dev, &m, &victim) != 0) return -14;
     memset(&victim, 0, sizeof victim); victim.i_dtime = (uint32_t)time(NULL);
-    if (ext2_write_inode_at(key, off, &m, ino, &victim) != 0) return -15;
-    if (ext2_free_inode_num(key, off, &m, ino) != 0) return -16;
+    if (ext2_write_inode_at(dev, &m, ino, &victim) != 0) return -15;
+    if (ext2_free_inode_num(dev, &m, ino) != 0) return -16;
     pdir.i_mtime = pdir.i_ctime = (uint32_t)time(NULL);
-    if (ext2_write_inode_at(key, off, &m, parent_ino, &pdir) != 0) return -17;
+    if (ext2_write_inode_at(dev, &m, parent_ino, &pdir) != 0) return -17;
     return 0;
 }
 
 /* Truncate an existing regular file to zero bytes while keeping its inode and
    directory entry.  This is the EXT2 operation needed for O_TRUNC semantics. */
-int ext2_truncate_at(const char *key, uint64_t off, const char *path, uint64_t size)
+int ext2_truncate_at(vblk_t *dev, const char *path, uint64_t size)
 {
-    if (!key || !path || size != 0) return -1;
+    if (!dev || !path || size != 0) return -1;
     ext2_meta m;
-    if (ext2_load_meta(key, off, &m) != 0) return -2;
+    if (ext2_load_meta(dev, &m) != 0) return -2;
     uint32_t ino = 0;
-    if (ext2_resolve_path_at(key, off, &m, path, &ino) != 0 || !ino) return -3;
+    if (ext2_resolve_path_at(dev, &m, path, &ino) != 0 || !ino) return -3;
     ext2_inode file;
-    if (ext2_read_inode_at(key, off, &m, ino, &file) != 0) return -4;
+    if (ext2_read_inode_at(dev, &m, ino, &file) != 0) return -4;
     if ((file.i_mode & 0170000) == 0040000) return -5;
     if (file.i_block[14]) return -6;
-    if (ext2_free_inode_data_blocks(key, off, &m, &file) != 0) return -7;
+    if (ext2_free_inode_data_blocks(dev, &m, &file) != 0) return -7;
     memset(file.i_block, 0, sizeof file.i_block);
     file.i_size = 0; file.i_blocks = 0;
     file.i_mtime = file.i_ctime = (uint32_t)time(NULL);
-    return ext2_write_inode_at(key, off, &m, ino, &file);
+    return ext2_write_inode_at(dev, &m, ino, &file);
 }
 
 /* Write new data into an existing regular-file inode.  The pathname and inode
    are preserved; only file data/size/timestamps change.  If the inode still
    owns blocks, truncate it first so this routine is safe when called directly. */
-int ext2_write_existing_at(const char *key, uint64_t off,
+int ext2_write_existing_at(vblk_t *dev,
                            const char *path, const void *data, size_t len)
 {
-    if (!key || !path || (!data && len)) return -1;
+    if (!dev || !path || (!data && len)) return -1;
     if (len > UINT32_MAX) return -2;
 
     ext2_meta m;
-    if (ext2_load_meta(key, off, &m) != 0) return -3;
+    if (ext2_load_meta(dev, &m) != 0) return -3;
 
     uint32_t ino = 0;
-    if (ext2_resolve_path_at(key, off, &m, path, &ino) != 0 || ino == 0) return -4;
+    if (ext2_resolve_path_at(dev, &m, path, &ino) != 0 || ino == 0) return -4;
 
     ext2_inode file;
-    if (ext2_read_inode_at(key, off, &m, ino, &file) != 0) return -5;
+    if (ext2_read_inode_at(dev, &m, ino, &file) != 0) return -5;
     if ((file.i_mode & 0170000) == 0040000) return -6;
     if (file.i_block[14]) return -7;
 
@@ -961,9 +961,9 @@ int ext2_write_existing_at(const char *key, uint64_t off,
         }
     }
     if (owns_blocks || file.i_size != 0) {
-        if (ext2_truncate_at(key, off, path, 0) != 0) return -8;
-        if (ext2_load_meta(key, off, &m) != 0) return -9;
-        if (ext2_read_inode_at(key, off, &m, ino, &file) != 0) return -10;
+        if (ext2_truncate_at(dev, path, 0) != 0) return -8;
+        if (ext2_load_meta(dev, &m) != 0) return -9;
+        if (ext2_read_inode_at(dev, &m, ino, &file) != 0) return -10;
     }
 
     const uint32_t ptrs = m.block_size / sizeof(uint32_t);
@@ -1001,7 +1001,7 @@ int ext2_write_existing_at(const char *key, uint64_t off,
     int rc = 0;
 
 #define ALLOC_EXISTING_BLOCK(dst_) do { \
-        (dst_) = ext2_alloc_block_ctx(key, off, &m, &actx); \
+        (dst_) = ext2_alloc_block_ctx(dev, &m, &actx); \
         if (!(dst_)) { rc = -15; goto fail_existing; } \
         allocated_blocks++; \
     } while (0)
@@ -1026,7 +1026,7 @@ int ext2_write_existing_at(const char *key, uint64_t off,
 
             if (dleaf_index != outer) {
                 if (dleaf_index != UINT32_MAX) {
-                    if (!pwrite_block(key, off, m.block_size, dleaf_block,
+                    if (!pwrite_block(dev, m.block_size, dleaf_block,
                                       dleaf, m.block_size)) {
                         rc = -17; goto fail_existing;
                     }
@@ -1042,27 +1042,27 @@ int ext2_write_existing_at(const char *key, uint64_t off,
     }
 
     if (file.i_block[12] &&
-        !pwrite_block(key, off, m.block_size, file.i_block[12], single, m.block_size)) {
+        !pwrite_block(dev, m.block_size, file.i_block[12], single, m.block_size)) {
         rc = -18; goto fail_existing;
     }
     if (dleaf_index != UINT32_MAX &&
-        !pwrite_block(key, off, m.block_size, dleaf_block, dleaf, m.block_size)) {
+        !pwrite_block(dev, m.block_size, dleaf_block, dleaf, m.block_size)) {
         rc = -19; goto fail_existing;
     }
     if (file.i_block[13] &&
-        !pwrite_block(key, off, m.block_size, file.i_block[13], droot, m.block_size)) {
+        !pwrite_block(dev, m.block_size, file.i_block[13], droot, m.block_size)) {
         rc = -20; goto fail_existing;
     }
 
-    if (ext2_write_data_runs(key, off, &m, data, len, data_blocks, need_data) != 0) {
+    if (ext2_write_data_runs(dev, &m, data, len, data_blocks, need_data) != 0) {
         rc = -21; goto fail_existing;
     }
 
     file.i_blocks = allocated_blocks * (m.block_size / 512u);
-    if (ext2_alloc_ctx_commit(key, off, &m, &actx) != 0) {
+    if (ext2_alloc_ctx_commit(dev, &m, &actx) != 0) {
         rc = -21; goto fail_existing;
     }
-    if (ext2_write_inode_at(key, off, &m, ino, &file) != 0) {
+    if (ext2_write_inode_at(dev, &m, ino, &file) != 0) {
         rc = -22; goto fail_existing;
     }
 
@@ -1078,20 +1078,20 @@ fail_existing:
 #undef ALLOC_EXISTING_BLOCK
 }
 
-int ext2_create_and_write(const char *key, uint64_t off,
+int ext2_create_and_write(vblk_t *dev,
                           const char *path, const void *data, size_t len)
 {
-    if (!key || !path || (!data && len)) return -1;
+    if (!dev || !path || (!data && len)) return -1;
 
     ext2_meta m;
-    if (ext2_load_meta(key, off, &m) != 0) return -2;
+    if (ext2_load_meta(dev, &m) != 0) return -2;
 
     char parent[512], name[256];
     if (split_parent_name(path, parent, sizeof parent, name, sizeof name) != 0) return -3;
 
     uint32_t parent_ino = 0;
-    if (ext2_resolve_path_at(key, off, &m, parent, &parent_ino) != 0) return -4;
-    if (ext2_find_entry_at(key, off, &m, parent_ino, name, NULL, NULL) == 1) return -5;
+    if (ext2_resolve_path_at(dev, &m, parent, &parent_ino) != 0) return -4;
+    if (ext2_find_entry_at(dev, &m, parent_ino, name, NULL, NULL) == 1) return -5;
 
     if (len > UINT32_MAX) return -6; /* classic EXT2 i_size used by Guppy */
 
@@ -1100,9 +1100,9 @@ int ext2_create_and_write(const char *key, uint64_t off,
     const uint64_t need_data =
         len ? ((uint64_t)len + m.block_size - 1u) / m.block_size : 0;
 
-    if (need_data > max_data_blocks) return -7; /* triple indirect not yet needed */
+    if (need_data > max_data_blocks) return -7; /* triple-indirect addressing is outside the current scope; see FUTURE.md */
 
-    uint32_t ino = ext2_alloc_inode(key, off, &m);
+    uint32_t ino = ext2_alloc_inode(dev, &m);
     if (!ino) return -11;
 
     ext2_inode file;
@@ -1140,7 +1140,7 @@ int ext2_create_and_write(const char *key, uint64_t off,
     }
 
 #define ALLOC_BLOCK(dst_) do { \
-        (dst_) = ext2_alloc_block_ctx(key, off, &m, &actx); \
+        (dst_) = ext2_alloc_block_ctx(dev, &m, &actx); \
         if (!(dst_)) { rc = -13; goto fail; } \
         allocated_blocks++; \
     } while (0)
@@ -1172,7 +1172,7 @@ int ext2_create_and_write(const char *key, uint64_t off,
             if (dleaf_index != outer) {
                 /* Flush the previous second-level table before moving on. */
                 if (dleaf_index != UINT32_MAX) {
-                    if (!pwrite_block(key, off, m.block_size, dleaf_block,
+                    if (!pwrite_block(dev, m.block_size, dleaf_block,
                                       dleaf, m.block_size)) {
                         rc = -15; goto fail;
                     }
@@ -1191,37 +1191,37 @@ int ext2_create_and_write(const char *key, uint64_t off,
     }
 
     if (file.i_block[12] != 0 &&
-        !pwrite_block(key, off, m.block_size, file.i_block[12],
+        !pwrite_block(dev, m.block_size, file.i_block[12],
                       single, m.block_size)) {
         rc = -16; goto fail;
     }
 
     if (dleaf_index != UINT32_MAX &&
-        !pwrite_block(key, off, m.block_size, dleaf_block,
+        !pwrite_block(dev, m.block_size, dleaf_block,
                       dleaf, m.block_size)) {
         rc = -17; goto fail;
     }
 
     if (file.i_block[13] != 0 &&
-        !pwrite_block(key, off, m.block_size, file.i_block[13],
+        !pwrite_block(dev, m.block_size, file.i_block[13],
                       droot, m.block_size)) {
         rc = -18; goto fail;
     }
 
-    if (ext2_write_data_runs(key, off, &m, data, len, data_blocks, need_data) != 0) {
+    if (ext2_write_data_runs(dev, &m, data, len, data_blocks, need_data) != 0) {
         rc = -19; goto fail;
     }
 
     file.i_blocks = allocated_blocks * (m.block_size / 512u);
 
-    if (ext2_alloc_ctx_commit(key, off, &m, &actx) != 0) {
+    if (ext2_alloc_ctx_commit(dev, &m, &actx) != 0) {
         rc = -19; goto fail;
     }
-    if (ext2_write_inode_at(key, off, &m, ino, &file) != 0) {
+    if (ext2_write_inode_at(dev, &m, ino, &file) != 0) {
         rc = -20; goto fail;
     }
 
-    if (ext2_append_dirent_at(key, off, &m, parent_ino, ino, 1, name) < 0) {
+    if (ext2_append_dirent_at(dev, &m, parent_ino, ino, 1, name) < 0) {
         rc = -21; goto fail;
     }
     rc = 0;

@@ -1,0 +1,25 @@
+create raw-normalize.img 32M
+use -i raw-normalize.img /dev/a
+
+gpt init /dev/a
+gpt add /dev/a --type linuxfs --name rootfs --start 2M --size 24M
+
+partscan /dev/a
+gpt print /dev/a
+
+mkfs.ext2 /dev/a1
+mount /dev/a1 /target
+
+mkdir /target/alpha
+mkdir /target/alpha/one
+mkdir /target/alpha/one/two
+
+echo "RAW NORMALIZATION TEST" > /target/alpha/one/two/test.txt
+
+ls /target
+ls /target/alpha
+ls /target/alpha/one
+ls /target/alpha/one/two
+
+cat /target/alpha/one/two/test.txt
+stat /target/alpha/one/two/test.txt

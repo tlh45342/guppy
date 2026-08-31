@@ -1,0 +1,7 @@
+use -i test.vdi /dev/a
+debug on
+gpt init /dev/a
+gpt add /dev/a --type linuxfs --name testpart --start 2M --size 24M
+partscan /dev/a
+gpt print /dev/a
+write /dev/a boot0.bin

@@ -1,0 +1,7 @@
+create -f vdi test-guppy.vdi 32M
+use -i test-guppy.vdi /dev/a
+gpt init /dev/a
+gpt add /dev/a --type linuxfs --name testpart --start 2M --size 24M
+partscan /dev/a
+gpt print /dev/a
+write /dev/a boot0.bin

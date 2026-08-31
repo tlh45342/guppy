@@ -1,6 +1,6 @@
 # Guppy
 
-**Current version: 0.0.41**
+**Current version: 0.0.42**
 
 **Guppy** is a scriptable disk- and filesystem-image construction tool
 written in C. It is intended to make low-level image building practical
@@ -22,6 +22,11 @@ construction.
 ## Current Highlights
 
 -   Image creation with binary/decimal size syntax.
+-   Virtual-disk container support through `libvdisk`:
+    -   RAW images;
+    -   fixed VDI images, including create/open/read/write/flush;
+    -   case-insensitive `.vdi` format inference and explicit `-f vdi`;
+    -   Guppy-created fixed VDI images have been boot-tested successfully in VirtualBox.
 -   Virtual block devices such as `/dev/a`, `/dev/a1`, and `/dev/a2`.
 -   MBR and GPT discovery and GPT creation.
 -   GPT partition types currently used by Guppy include `linuxfs` and
@@ -99,6 +104,88 @@ cp /iso/install.amd/vmlinuz /boot/vmlinuz
 For EXT2, an existing destination is truncated and rewritten through the
 existing inode rather than being silently refused or implemented as an
 `rm` followed by a new create.
+
+------------------------------------------------------------------------
+
+## Virtual Disk Images and `libvdisk`
+
+Guppy separates logical block-device access from the host-side disk-image
+container. The `libvdisk` layer presents a virtual disk as a logical byte
+array while format backends translate those accesses to the underlying host
+file. Partitioning and filesystem code therefore do not need to know whether
+the disk is RAW, VDI, or another future container format.
+
+The current path is:
+
+``` text
+commands / VFS / GPT / filesystems
+              |
+             vblk
+      (device + slice bounds)
+              |
+          libvdisk
+              |
+          RAW / VDI
+              |
+           host I/O
+```
+
+RAW remains the default for ordinary image names:
+
+``` text
+create disk.img 32M
+create -f raw disk.img 32M
+```
+
+Fixed VDI images can be created explicitly:
+
+``` text
+create -f vdi disk.vdi 32M
+```
+
+The `.vdi` extension is also recognized when the format is not explicitly
+specified:
+
+``` text
+create disk.vdi 32M
+use -i disk.vdi /dev/a
+```
+
+Current VDI support targets the VDI 1.1 fixed-image layout. Guppy can create,
+open, read, write, and flush these images. A Guppy-created fixed VDI has been
+partitioned with GPT, had BIOS boot code written to virtual LBA 0, attached
+directly to Oracle VirtualBox, and successfully BIOS-booted. This provides an
+external interoperability test of both VDI creation and logical-sector
+translation.
+
+Dynamic/sparse VDI allocation is not yet implemented. VMDK, VHD, and QCOW2
+are prospective additional `libvdisk` backends.
+
+------------------------------------------------------------------------
+
+## Bootable VDI Example
+
+A small BIOS-bootable fixed VDI can be constructed entirely by Guppy:
+
+``` text
+create -f vdi test.vdi 32M
+use -i test.vdi /dev/a
+
+gpt init /dev/a
+gpt add /dev/a --type linuxfs --name testpart --start 2M --size 24M
+partscan /dev/a
+gpt print /dev/a
+
+write /dev/a boot0.bin
+```
+
+Here `write /dev/a boot0.bin` writes to virtual disk offset zero. For a VDI,
+`libvdisk` translates that logical access to the correct data region in the
+container; GPT and the command layer operate exactly as they do for a RAW
+disk.
+
+This exact workflow has been validated by booting the resulting VDI under
+VirtualBox.
 
 ------------------------------------------------------------------------
 
@@ -407,9 +494,18 @@ runner.
 
 ## Project Status
 
+### 0.0.42
+
+Version 0.0.42 consolidates recent VFS/EXT2 repairs and introduces the first
+`libvdisk` container backend work. RAW image access is routed through the
+virtual-disk layer, and fixed VDI images can now be created, opened, read,
+written, and flushed. A Guppy-created VDI has been independently boot-tested
+under VirtualBox. The release also cleans stale source comments and records
+deliberately deferred work in `FUTURE.md`.
+
 ### 0.0.41
 
-Version 0.0.41 adds the `date` and `chmod` commands and continues the
+Version 0.0.41 added the `date` and `chmod` commands and continued the
 EXT2/VFS work used by the current bootable-system-image project.
 
 Guppy is under active development. The VFS and filesystem layers are
@@ -439,9 +535,19 @@ Current areas of work include:
     create/read/write/remove;
 -   triple-indirect EXT2 block addressing if image workloads require it;
 -   broader Rock Ridge compatibility where real-world media requires it;
--   additional filesystem formats and image/container formats;
+-   dynamic/sparse VDI allocation;
+-   VMDK and other additional virtual-disk container backends;
+-   additional filesystem formats;
 -   continued strengthening of VFS/filesystem error propagation and
     validation.
+
+------------------------------------------------------------------------
+
+## Future Work
+
+Deliberately deferred features and known limitations are tracked in
+`FUTURE.md`. Keeping them there avoids leaving ambiguous placeholder comments
+throughout otherwise functional code.
 
 ------------------------------------------------------------------------
 

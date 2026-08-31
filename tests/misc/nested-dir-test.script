@@ -1,0 +1,43 @@
+create nested.img 16M
+use -i nested.img /dev/a
+mkfs.ext2 /dev/a --label NESTED
+mount /dev/a /target
+
+mkdir /target/alpha
+mkdir /target/alpha/one
+mkdir /target/alpha/one/two
+mkdir /target/beta
+
+echo ROOT > /target/root.txt
+echo ALPHA > /target/alpha/alpha.txt
+echo ONE > /target/alpha/one/one.txt
+echo DEEP > /target/alpha/one/two/deep.txt
+echo BETA > /target/beta/beta.txt
+
+ls -la /target
+ls -la /target/alpha
+ls -la /target/alpha/one
+ls -la /target/alpha/one/two
+
+stat /target/alpha
+stat /target/alpha/one
+stat /target/alpha/one/two
+stat /target/alpha/one/two/deep.txt
+
+cd /target
+pwd
+ls -la
+cd alpha
+pwd
+ls -la
+cd one
+pwd
+ls -la
+cd two
+pwd
+ls -la
+cat deep.txt
+cd ..
+pwd
+cd ..
+pwd

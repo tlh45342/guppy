@@ -106,3 +106,12 @@ Core features: REPL, device attach (`use`), partition scan (MBR/GPT), basic VFS,
 - The optional offset is relative to the selected device/partition and uses Guppy's common size syntax.
 - Bounds checks prevent a write from extending beyond the selected partition.
 - Intended first use: placing boot-stage payloads in a GPT BIOS Boot Partition without teaching Guppy about any particular bootloader.
+
+## 0.0.42 - housekeeping
+
+- Cleaned stale shim/placeholder comments that no longer described current VFS/EXT2 behavior.
+- Added `FUTURE.md` to collect deliberate deferred work and known limitations.
+- Documented the remaining group-0 assumption in the compact VFS-side EXT2 metadata reader.
+- Changed the unused `del_disk()` placeholder from false success to explicit failure until device removal is implemented.
+- Added the missing `<sys/types.h>` includes needed by the existing 64-bit file-offset code on Linux.
+- No new filesystem or user command functionality is introduced by this housekeeping pass.

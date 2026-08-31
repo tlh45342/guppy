@@ -1,5 +1,7 @@
 // src/blkio.c — absolute-LBA block I/O over multiple image files
+
 #include <stdio.h>
+#include <sys/types.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>

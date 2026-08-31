@@ -7,6 +7,7 @@
 #include <errno.h>
 
 #include "debug.h"
+#include "cwd.h"
 #include "vfs.h"
 #include "vfs_stat.h"
 
@@ -100,19 +101,60 @@ typedef struct mount_rec {
 static mount_rec_t g_mnt[VFS_MAX_MOUNTS];
 static int         g_mnt_n = 0;
 
-/* Normalize path: convert '\' to '/', collapse '//' and trim trailing '/', keep "/" */
+/*
+ * Convert a user path into one canonical absolute VFS path.
+ * Relative paths are resolved against Guppy's cwd before mount routing.
+ */
 static void vfs_normalize_path(const char *in, char *out, size_t cap) {
-    if (!in || !*in) { strncpy(out, "/", cap); out[cap-1] = '\0'; return; }
-    size_t j = 0; char prev = 0;
-    for (size_t i = 0; in[i] && j + 1 < cap; ++i) {
-        char c = in[i];
-        if (c == '\\') c = '/';
-        if (c == '/' && prev == '/') continue;
-        out[j++] = c; prev = c;
+    char combined[VFS_PATH_MAX * 2];
+    const char *cwd = cwd_get();
+
+    if (!out || cap == 0) return;
+    out[0] = '\0';
+
+    if (!in || !*in) in = ".";
+    if (!cwd || !*cwd || cwd[0] != '/') cwd = "/";
+
+    if (in[0] == '/' || in[0] == '\\')
+        snprintf(combined, sizeof combined, "%s", in);
+    else if (strcmp(cwd, "/") == 0)
+        snprintf(combined, sizeof combined, "/%s", in);
+    else
+        snprintf(combined, sizeof combined, "%s/%s", cwd, in);
+
+    size_t oi = 0;
+    out[oi++] = '/';
+    out[oi] = '\0';
+
+    size_t i = 0;
+    while (combined[i]) {
+        while (combined[i] == '/' || combined[i] == '\\') ++i;
+        if (!combined[i]) break;
+
+        size_t start = i;
+        while (combined[i] && combined[i] != '/' && combined[i] != '\\') ++i;
+        size_t seglen = i - start;
+
+        if (seglen == 1 && combined[start] == '.') continue;
+
+        if (seglen == 2 && combined[start] == '.' && combined[start + 1] == '.') {
+            if (oi > 1) {
+                while (oi > 1 && out[oi - 1] != '/') --oi;
+                if (oi > 1) --oi;
+                out[oi] = '\0';
+            }
+            continue;
+        }
+
+        if (oi > 1) {
+            if (oi + 1 >= cap) { out[0] = '\0'; return; }
+            out[oi++] = '/';
+        }
+        if (oi + seglen >= cap) { out[0] = '\0'; return; }
+        memcpy(out + oi, combined + start, seglen);
+        oi += seglen;
+        out[oi] = '\0';
     }
-    out[j] = '\0';
-    size_t n = strlen(out);
-    while (n > 1 && out[n-1] == '/') { out[n-1] = '\0'; --n; }
 }
 
 /* Longest-prefix match mount */
@@ -436,6 +478,7 @@ int vfs_open(const char *path, int flags, uint32_t mode, struct file **out) {
         if (r.leaf[0] == '\0')    return -1;
         if (r.dir->i_op->create(r.dir, r.leaf, mode, &target) != 0 || !target) return -1;
     }
+    if (!target) return -1;
 #else
     if (!target) {
         if (flags & VFS_O_CREAT) return -1;

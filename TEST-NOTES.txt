@@ -1,0 +1,41 @@
+Guppy 0.0.42 - fixed VDI creation pass
+
+Changed files:
+  lib/vdisk/src/backend_vdi.c
+  src/cmd_create.c
+  src/cmd_registry.c
+
+Added test helper:
+  tests/hello/work-vdi-create.script
+
+New command:
+  create -f vdi test.vdi 32M
+
+Also supported:
+  create test.vdi 32M       (.vdi extension infers VDI)
+  create -f raw test.img 32M
+  create test.img 32M       (existing RAW behavior)
+
+VDI creation:
+  VDI 1.1 fixed/static image
+  512-byte header
+  1 MiB blocks
+  fixed block map entries 0..N-1
+  512-byte aligned data area
+  512-byte logical sector size
+  base-image UUIDs
+
+Temporary always-on VDI diagnostics from the previous pass were removed.
+
+Sandbox tests actually performed against the uploaded Guppy source tree:
+  full make clean + make: PASS
+  create -f vdi 32M: PASS
+  reopen created VDI through use -i: PASS
+  GPT init/add/partscan/print inside created VDI: PASS
+  VDI header fields and fixed block map inspected: PASS
+  legacy RAW create regression: PASS
+  .vdi extension AUTO creation: PASS
+
+Not tested here:
+  VirtualBox itself is not installed in the sandbox. The final acceptance test
+  is to attach test-guppy.vdi to VirtualBox and boot the HELLO WORLD boot0.

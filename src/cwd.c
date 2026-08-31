@@ -15,8 +15,8 @@ void cwd_set(const char *path) {
     // Simple normalization: ensure it starts with '/', trim trailing '/' (except root)
     size_t n = strlen(path);
     if (path[0] != '/') {
-        // Reject non-absolute for now; keep as-is or force absolute
-        // For now, just copy and let future 'cd' handle relative.
+        // cwd_set() normally receives a canonical absolute path from cmd_cd.
+        // Preserve a non-absolute caller value rather than rewriting it here.
         strncpy(g_cwd, path, sizeof(g_cwd)-1);
         g_cwd[sizeof(g_cwd)-1] = 0;
         return;
