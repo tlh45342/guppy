@@ -9,9 +9,10 @@
 #include "vblk.h"
 #include "genhd.h"
 #include "debug.h"
+#include "app_printf.h"
 
 static void usage(void) {
-    printf(
+    app_printf(
         "usage:\n"
         "  use                        # list registered block devices\n"
         "  use -i <image> <devname>   # attach <image> to <devname> and scan partitions\n"
@@ -20,15 +21,15 @@ static void usage(void) {
 }
 
 static void list_devices(void) {
-    if (g_vblk_count == 0) {
-        printf("(no devices registered)\n");
-        return;
-    }
+    int shown = 0;
     for (int i=0;i<g_vblk_count;++i) {
         const vblk_t *p=&g_vblk[i];
-        printf("%-10s %-24s start=%" PRIu64 " size=%" PRIu64 " LBAs\n",
+        if (!p->name[0]) continue;
+        app_printf("%-10s %-24s start=%" PRIu64 " size=%" PRIu64 " LBAs\n",
                p->name,p->dev[0]?p->dev:"-",p->lba_start,p->lba_size);
+        ++shown;
     }
+    if (!shown) app_printf("(no devices registered)\n");
 }
 
 static int handle_use_attach(const char *image_path,const char *devname) {

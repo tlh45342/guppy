@@ -306,6 +306,12 @@ int disk_scan_partitions(struct gendisk *gd) {
     if (!pconst) { fprintf(stderr, "partscan: parent '%s' not found\n", gd->name); DBG("disk_scan_partitions: return -1 (parent not found)"); return -1; }
     vblk_t *parent = (vblk_t*)pconst;
 
+    /* A rescan is an authoritative snapshot of this parent.  Drop any
+       previously discovered partition children first so stale geometry does
+       not survive media replacement, repartitioning, or a now-blank disk. */
+    int stale = vblk_remove_children(gd->name);
+    if (stale) DBG("  removed %d stale child registration(s)", stale);
+
     uint64_t size_bytes = vblk_size_bytes(parent);
     uint64_t total_lbas = size_bytes ? (size_bytes / (uint64_t)LSEC) : 0;
     DBG("  device=%s size_bytes=%" PRIu64 " total_lbas=%" PRIu64,

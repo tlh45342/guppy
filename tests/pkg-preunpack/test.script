@@ -1,0 +1,17 @@
+logfile pkg-preunpack.log
+create pkg-preunpack.img 16M
+use -i pkg-preunpack.img /dev/a
+gpt init /dev/a
+gpt add /dev/a --type linuxfs --name rootfs --start 1M --size 100%
+partscan /dev/a
+mkfs.ext2 /dev/a1
+mount /dev/a1 /target
+pkg install local:libc6_2.41-12+deb13u3_amd64.deb /target
+pkg status /target libc6
+echo === diversions ===
+cat /target/var/lib/dpkg/diversions
+echo === unpacked payload ===
+stat /target/usr/lib64/ld-linux-x86-64.so.2
+echo === preinst control member remains inspectable ===
+pkg control-file local:libc6_2.41-12+deb13u3_amd64.deb preinst
+logfile off

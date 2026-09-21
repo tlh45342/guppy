@@ -1,0 +1,24 @@
+; utility-output phase 1
+# comments and blank lines should be ignored
+
+logfile utility-output.log
+version
+date
+lcat host-input.txt
+lls .
+create utility.img 16M
+use -i utility.img /dev/a
+gpt init /dev/a
+gpt add /dev/a linuxfs rootfs 2048 32734
+partscan /dev/a
+mkfs.ext2 /dev/a1 --label UTILTEST
+mount /dev/a1 /target
+mkdir -p /target/data
+lcp host-input.txt /target/data
+cat /target/data/host-input.txt
+sha256 /target/data/host-input.txt
+hexdump -n 32 /target/data/host-input.txt
+create raw-write.img 1M
+use -i raw-write.img /dev/b
+write /dev/b host-input.txt 4096
+logfile off

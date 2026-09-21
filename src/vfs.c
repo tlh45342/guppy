@@ -9,6 +9,7 @@
 #include "debug.h"
 #include "cwd.h"
 #include "vfs.h"
+#include "app_printf.h"
 #include "vfs_stat.h"
 
 
@@ -200,117 +201,169 @@ static const char* comp_next(const char *s, char name[256]) {
     return s;
 }
 
-static int vfs_walk_rel(mount_rec_t *mnt, const char *rel, path_res_t *out)
+static int vfs_path_set(char *dst, size_t cap, const char *src)
 {
-    DBG("vfs_walk_rel: Start path=\"%s\" on mount=\"%s\"",
-        rel ? rel : "(null)", mnt ? mnt->mp : "(mnt NULL)");
-    if (!mnt || !mnt->sb || !mnt->sb->root) {
-        DBG("vfs_walk_rel: Invalid mount or missing root inode");
-        return -1;
-    }
-
-    inode_t *cur = mnt->sb->root;
-
-    /* Keep a tiny parent stack so '..' can walk up. */
-    enum { PARENT_STACK_MAX = 64 };
-    inode_t *stack[PARENT_STACK_MAX];
-    int depth = 0;                  /* number of parents on stack */
-    stack[depth++] = cur;           /* stack[0] is the root itself */
-
-    char leaf[256] = {0};
-
-    if (!rel || *rel == '\0') {
-        out->dir  = cur;
-        out->node = cur;
-        out->leaf[0] = '\0';
-        out->mnt  = mnt;
-        DBG("vfs_walk_rel: Path is mount root (inode=%p)", (void*)cur);
-        return 0;
-    }
-
-    char comp[256];
-    const char *p = rel;
-    while (*p) {
-        p = comp_next(p, comp);
-        if (comp[0] == '\0') {
-            /* Trailing slash or empty segment: nothing to do */
-            continue;
-        }
-
-        /* VFS-level handling of dot components */
-        if (comp[0] == '.' && comp[1] == '\0') {
-            DBG("vfs_walk_rel: component '.' -> stay at %p", (void*)cur);
-            continue;
-        }
-        if (comp[0] == '.' && comp[1] == '.' && comp[2] == '\0') {
-            if (depth > 1) {
-                /* Pop to parent (do not pop past root) */
-                depth--;
-                cur = stack[depth - 1];
-            }
-            DBG("vfs_walk_rel: component '..' -> now at %p (depth=%d)",
-                (void*)cur, depth);
-            continue;
-        }
-
-        DBG("vfs_walk_rel: [%p] lookup \"%s\"", (void*)cur, comp);
-        if (!cur->i_op || !cur->i_op->lookup) {
-            DBG("vfs_walk_rel: ERROR - current inode has no lookup (not a dir?)");
-            return -1;
-        }
-
-        inode_t *next = NULL;
-        int rc = cur->i_op->lookup(cur, comp, &next);
-        DBG("vfs_walk_rel:    lookup returned rc=%d, next=%p", rc, (void*)next);
-        if (rc != 0) {
-            DBG("vfs_walk_rel: ERROR - lookup failed for \"%s\" (rc=%d)", comp, rc);
-            return -1;
-        }
-        if (!next) {
-            /* Component not found in this directory */
-            strncpy(leaf, comp, sizeof leaf);
-            leaf[sizeof leaf - 1] = '\0';
-            out->dir  = cur;
-            out->node = NULL;
-            out->mnt  = mnt;
-            strncpy(out->leaf, leaf, sizeof out->leaf);
-            out->leaf[sizeof out->leaf - 1] = '\0';
-            DBG("vfs_walk_rel: \"%s\" not found under dir %p; stopping",
-                comp, (void*)cur);
-            return 0;
-        }
-
-        /* Descend: push current as parent if room remains */
-        if (depth < PARENT_STACK_MAX) stack[depth++] = next;
-        cur = next;
-
-        DBG("vfs_walk_rel: --> Found \"%s\" inode=%p%s",
-            comp, (void*)cur,
-            (cur->i_op && cur->i_op->lookup) ? " [DIR]" : " [FILE]");
-    }
-
-    /* Fully resolved. Parent is the previous element on the stack (or self at root). */
-    inode_t *parent = (depth > 1) ? stack[depth - 2] : cur;
-
-    out->dir  = parent;
-    out->node = cur;
-    out->leaf[0] = '\0';
-    out->mnt  = mnt;
-
-    DBG("vfs_walk_rel: DONE. Final node=%p (parent=%p, depth=%d)",
-        (void*)out->node, (void*)out->dir, depth);
+    size_t n;
+    if (!dst || cap == 0 || !src) return -1;
+    n = strlen(src);
+    if (n >= cap) { dst[0] = '\0'; return -1; }
+    memcpy(dst, src, n + 1);
     return 0;
 }
 
+static int vfs_path_append(char *dst, size_t cap, const char *part)
+{
+    size_t dl, pl;
+    bool need_slash;
+    if (!dst || !part || cap == 0) return -1;
+    dl = strlen(dst);
+    while (*part == '/' || *part == '\\') ++part;
+    pl = strlen(part);
+    if (pl == 0) return 0;
+    need_slash = (dl == 0 || dst[dl - 1] != '/');
+    if (dl + (need_slash ? 1u : 0u) + pl >= cap) return -1;
+    if (need_slash) dst[dl++] = '/';
+    memcpy(dst + dl, part, pl + 1);
+    return 0;
+}
+
+/* Resolve a VFS pathname, following symbolic links encountered while walking.
+ * Intermediate symbolic links are always followed.  The final component may
+ * optionally be left unresolved for operations such as readlink(), unlink(),
+ * and symlink creation that operate on the link inode itself.
+ *
+ * Resolution restarts from the VFS mount router after each symlink expansion.
+ * This is slightly more work than continuing the current inode walk, but it
+ * gives the correct behavior for absolute symlink targets and for links that
+ * cross a Guppy mount point.
+ */
+static int vfs_resolve_path_ex(const char *path, path_res_t *out, bool follow_final)
+{
+    enum { VFS_SYMLINK_MAX = 40 };
+    char current[VFS_PATH_MAX];
+    int followed = 0;
+
+    if (!path || !*path || !out) return -1;
+
+    vfs_normalize_path(path, current, sizeof current);
+    if (current[0] == '\0') return -1;
+
+    for (;;) {
+        int mi = vfs_find_mount_for(current);
+        if (mi < 0) return -1;
+
+        mount_rec_t *mnt = &g_mnt[mi];
+        if (!mnt->sb || !mnt->sb->root) return -1;
+
+        char rel[VFS_PATH_MAX];
+        vfs_mount_relative(current, mnt, rel, sizeof rel);
+
+        inode_t *cur = mnt->sb->root;
+        inode_t *parent = cur;
+        char leaf[256] = {0};
+
+        if (rel[0] == '\0') {
+            out->dir = cur;
+            out->node = cur;
+            out->leaf[0] = '\0';
+            out->mnt = mnt;
+            return 0;
+        }
+
+        /* Absolute VFS path corresponding to the directory containing the
+         * component currently being looked up. */
+        char parent_path[VFS_PATH_MAX];
+        if (vfs_path_set(parent_path, sizeof parent_path, mnt->mp) != 0) return -1;
+
+        const char *p = rel;
+        bool restart = false;
+        while (*p) {
+            char comp[256];
+            const char *rest = comp_next(p, comp);
+            bool is_final = (*rest == '\0');
+
+            if (comp[0] == '\0') {
+                p = rest;
+                continue;
+            }
+
+            if (!cur->i_op || !cur->i_op->lookup) return -1;
+
+            inode_t *next = NULL;
+            int rc = cur->i_op->lookup(cur, comp, &next);
+            if (rc != 0) return -1;
+
+            if (!next) {
+                out->dir = cur;
+                out->node = NULL;
+                out->mnt = mnt;
+                snprintf(out->leaf, sizeof out->leaf, "%s", comp);
+                return 0;
+            }
+
+            snprintf(leaf, sizeof leaf, "%s", comp);
+
+            if (VFS_S_ISLNK(next->i_mode) && (!is_final || follow_final)) {
+                char target[VFS_PATH_MAX];
+                if (!next->i_op || !next->i_op->readlink) return -1;
+                int n = next->i_op->readlink(next, target, sizeof target - 1);
+                if (n < 0 || (size_t)n >= sizeof target) return -1;
+                target[n] = '\0';
+
+                if (++followed > VFS_SYMLINK_MAX) {
+                    DBG("vfs: symlink traversal limit exceeded for '%s'", path);
+                    return -1;
+                }
+
+                char expanded[VFS_PATH_MAX * 3];
+                expanded[0] = '\0';
+                if (target[0] == '/' || target[0] == '\\') {
+                    if (vfs_path_set(expanded, sizeof expanded, target) != 0) return -1;
+                } else {
+                    if (vfs_path_set(expanded, sizeof expanded, parent_path) != 0) return -1;
+                    if (vfs_path_append(expanded, sizeof expanded, target) != 0) return -1;
+                }
+                if (*rest && vfs_path_append(expanded, sizeof expanded, rest) != 0) return -1;
+
+                vfs_normalize_path(expanded, current, sizeof current);
+                if (current[0] == '\0') return -1;
+                DBG("vfs: symlink '%s' -> '%s'; restart as '%s'",
+                    comp, target, current);
+                restart = true;
+                break;
+            }
+
+            parent = cur;
+            cur = next;
+
+            /* Extend the absolute containing-directory path for the next
+             * component.  Do not append the final component because there is
+             * no following lookup that needs it as a parent. */
+            if (!is_final) {
+                if (vfs_path_append(parent_path, sizeof parent_path, comp) != 0) return -1;
+            }
+
+            p = rest;
+        }
+
+        if (restart) continue;
+
+        out->dir = parent;
+        out->node = cur;
+        snprintf(out->leaf, sizeof out->leaf, "%s", leaf);
+        out->mnt = mnt;
+        return 0;
+    }
+}
+
+/* Historical/default resolver: normal pathname consumers follow the final
+ * symlink just like POSIX stat/open/chdir. */
 static int vfs_resolve_path(const char *path, path_res_t *out) {
-    if (!path || !*path) return -1;
-    char norm[VFS_PATH_MAX];
-    vfs_normalize_path(path, norm, sizeof norm);
-    int mi = vfs_find_mount_for(norm);
-    if (mi < 0) return -1;
-    char rel[VFS_PATH_MAX];
-    vfs_mount_relative(norm, &g_mnt[mi], rel, sizeof rel);
-    return vfs_walk_rel(&g_mnt[mi], rel, out);
+    return vfs_resolve_path_ex(path, out, true);
+}
+
+static int vfs_resolve_path_nofinal(const char *path, path_res_t *out) {
+    return vfs_resolve_path_ex(path, out, false);
 }
 
 /* ---------- Router: mount / umount / list ---------- */
@@ -402,9 +455,9 @@ int vfs_umount(const char *mountpoint) {
 }
 
 void vfs_list_mounts(void) {
-    if (g_mnt_n == 0) { puts("(no mounts)"); return; }
+    if (g_mnt_n == 0) { app_printf("(no mounts)\n"); return; }
     for (int i = 0; i < g_mnt_n; ++i) {
-        printf("%-10s %-6s %-12s %s\n",
+        app_printf("%-10s %-6s %-12s %s\n",
                g_mnt[i].src[0] ? g_mnt[i].src : "-",
                g_mnt[i].fstype[0] ? g_mnt[i].fstype :
                  (g_mnt[i].sb && g_mnt[i].sb->fs_type && g_mnt[i].sb->fs_type->name ? g_mnt[i].sb->fs_type->name : "-"),
@@ -528,11 +581,32 @@ int vfs_mkdir(const char *path, unsigned mode) {
 #endif
 }
 
+int vfs_mknod(const char *path, uint32_t mode, uint32_t major, uint32_t minor) {
+    path_res_t r;
+    if (!path || !*path) return -1;
+    if ((mode & VFS_S_IFMT) != VFS_S_IFCHR && (mode & VFS_S_IFMT) != VFS_S_IFBLK) return -1;
+    if (vfs_resolve_path_nofinal(path, &r) != 0) return -1;
+    if (!r.dir || !r.dir->i_op || !r.dir->i_op->mknod) return -1;
+    if (r.node || r.leaf[0] == '\0') return -1;
+    return r.dir->i_op->mknod(r.dir, r.leaf, mode, major, minor);
+}
+
+int vfs_symlink(const char *target, const char *linkpath) {
+    path_res_t r;
+
+    if (!target || !*target || !linkpath || !*linkpath) return -1;
+    if (vfs_resolve_path_nofinal(linkpath, &r) != 0) return -1;
+    if (!r.dir || !r.dir->i_op || !r.dir->i_op->symlink) return -1;
+    if (r.node || r.leaf[0] == '\0') return -1;
+
+    return r.dir->i_op->symlink(r.dir, r.leaf, target);
+}
+
 int vfs_unlink(const char *path) {
     path_res_t r;
 
     if (!path || !*path) return -1;
-    if (vfs_resolve_path(path, &r) != 0) return -1;
+    if (vfs_resolve_path_nofinal(path, &r) != 0) return -1;
     if (!r.node || !r.dir || !r.dir->i_op || !r.dir->i_op->unlink) return -1;
     if (r.leaf[0] == '\0') return -1;
     if (VFS_S_ISDIR(r.node->i_mode)) return -1;
@@ -559,16 +633,32 @@ int vfs_statfs(const char *path, struct g_statvfs *svfs) {
 
 int vfs_chmod(const char *path, uint32_t mode) {
     path_res_t r;
-    uint32_t new_mode;
+    vfs_iattr_t attr;
 
     if (!path || !*path) return -1;
     if (mode & ~07777u) return -1;
     if (vfs_resolve_path(path, &r) != 0) return -1;
     if (!r.node || !r.node->i_op || !r.node->i_op->setattr) return -1;
 
-    /* Preserve the inode type; chmod changes only permission/special bits. */
-    new_mode = (r.node->i_mode & VFS_S_IFMT) | (mode & 07777u);
-    return r.node->i_op->setattr(r.node, &new_mode);
+    memset(&attr, 0, sizeof attr);
+    attr.valid = VFS_IATTR_MODE;
+    attr.mode = mode & 07777u;
+    return r.node->i_op->setattr(r.node, &attr);
+}
+
+int vfs_chown(const char *path, uint32_t uid, uint32_t gid) {
+    path_res_t r;
+    vfs_iattr_t attr;
+
+    if (!path || !*path) return -1;
+    if (vfs_resolve_path(path, &r) != 0) return -1;
+    if (!r.node || !r.node->i_op || !r.node->i_op->setattr) return -1;
+
+    memset(&attr, 0, sizeof attr);
+    attr.valid = VFS_IATTR_UID | VFS_IATTR_GID;
+    attr.uid = uid;
+    attr.gid = gid;
+    return r.node->i_op->setattr(r.node, &attr);
 }
 
 /* ---- Built-in FS declarations (provided by each module) ---- */
@@ -590,7 +680,7 @@ int vfs_init(void) {
 int vfs_readlink(const char *path, char *buf, size_t bufsz) {
     if (!path || !buf || bufsz == 0) return -1;
     path_res_t r;
-    if (vfs_resolve_path(path, &r) != 0) return -1;
+    if (vfs_resolve_path_nofinal(path, &r) != 0) return -1;
     if (!r.node || !r.node->i_op || !r.node->i_op->readlink) return -1;
     /* Contract: return number of bytes written (like readlink), and ensure NUL at caller if desired. */
     int n = r.node->i_op->readlink(r.node, buf, bufsz - 1);

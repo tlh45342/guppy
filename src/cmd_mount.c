@@ -6,6 +6,7 @@
 #include "vblk.h"
 #include "vfs.h"
 #include "debug.h"
+#include "app_printf.h"
 #ifndef DBG
 #define DBG(...) do{}while(0)
 #endif
@@ -14,7 +15,7 @@
 // Usage
 // -----------------------------------------------------------------------------
 static void usage(void) {
-    printf(
+    app_printf(
         "usage: mount [-t <fstype>] [-o opts] <device> <mountpoint>\n"
         "  e.g.: mount -t fat -o ro /dev/a1 /mnt/a\n"
         "        mount /dev/b /mnt/iso        # auto-probe filesystem\n"

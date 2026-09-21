@@ -1,0 +1,3 @@
+logfile app-printf.log
+logfile
+logfile off

@@ -1,0 +1,30 @@
+# DEBMIN4 requested packages
+libc6
+libc-bin
+gcc-14-base
+libgcc-s1
+base-files
+base-passwd
+debianutils
+mawk
+dash
+bash
+coreutils
+grep
+sed
+findutils
+diffutils
+gzip
+tar
+
+# Dependencies already observed in DEBMIN4 / package metadata
+libdebconfclient0
+libpcre2-8-0
+libselinux1
+libacl1
+libattr1
+libcap2
+libgmp10
+libssl3t64
+libsystemd0
+libtinfo6

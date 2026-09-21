@@ -1,5 +1,6 @@
+logfile iso-regression.log
 use -i disc.iso /dev/b
 use
 mount /dev/b /
 ls -la
-
+logfile off

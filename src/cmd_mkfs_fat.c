@@ -1,32 +1,44 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <inttypes.h>
+
 #include "fs_format.h"
 #include "diskio.h"
 #include "debug.h"
+#include "vblk.h"
+#include "app_printf.h"
 
 // usage: mkfs.fat /dev/a [-o lba] [-S bps] [-c spc] [-F 12|16|32] [-L label] [-n oem] [-v]
 int cmd_mkfs_fat(int argc, char **argv){
     if (argc < 2){
-        printf("usage: mkfs.fat /dev/X [-o lba] [-S bps] [-c spc] [-F 12|16|32] [-L label] [-n oem] [-v]\n");
+        app_printf("usage: mkfs.fat /dev/X [-o lba] [-S bps] [-c spc] [-F 12|16|32] [-L label] [-n oem] [-v]\n");
         return 2;
     }
     const char *dev = argv[1];
 
-	const char *mapped = diskio_resolve(dev);
-	if (!mapped){
-		printf("mkfs.fat: device not mapped: %s\n", dev);
-		return 1;
-	}
-
-    DBG("mkfs.fat: %s -> %s", dev, mapped);
-
     char path[512] = {0};
-    strncpy(path, mapped, sizeof path - 1);
+    uint64_t base_off = 0, bounded_bytes = 0;
+    const char *mapped = NULL;
+
+    if (vblk_resolve_to_base(dev, path, sizeof path, &base_off, &bounded_bytes)) {
+        mapped = path;
+    } else {
+        mapped = diskio_resolve(dev);
+        if (!mapped){
+            app_printf("mkfs.fat: device not mapped: %s\n", dev);
+            return 1;
+        }
+        snprintf(path, sizeof path, "%s", mapped);
+    }
+
+    DBG("mkfs.fat: %s -> %s base=%" PRIu64 " size=%" PRIu64,
+        dev, path, base_off, bounded_bytes);
 
     mkfs_fat_opts_t opt = {
         .image_path    = path,
-        .lba_offset    = 0,
+        .lba_offset    = (uint32_t)(base_off / 512u),
+        .size_bytes    = bounded_bytes,
         .bytes_per_sec = 512,
         .sec_per_clus  = 0,
         .fat_type      = -1,
@@ -36,19 +48,25 @@ int cmd_mkfs_fat(int argc, char **argv){
     };
 
     for (int i=2;i<argc;i++){
-        if (!strcmp(argv[i],"-o") && i+1<argc) opt.lba_offset=(uint32_t)strtoul(argv[++i],NULL,0);
+        if (!strcmp(argv[i],"-o") && i+1<argc) {
+            if (base_off != 0) {
+                app_printf("mkfs.fat: -o is not valid for a partition device\n");
+                return 2;
+            }
+            opt.lba_offset=(uint32_t)strtoul(argv[++i],NULL,0);
+        }
         else if (!strcmp(argv[i],"-S") && i+1<argc) opt.bytes_per_sec=(uint16_t)strtoul(argv[++i],NULL,0);
         else if (!strcmp(argv[i],"-c") && i+1<argc) opt.sec_per_clus=(uint8_t)strtoul(argv[++i],NULL,0);
         else if (!strcmp(argv[i],"-F") && i+1<argc) opt.fat_type=(int)strtoul(argv[++i],NULL,0);
         else if (!strcmp(argv[i],"-L") && i+1<argc) opt.label=argv[++i];
         else if (!strcmp(argv[i],"-n") && i+1<argc) opt.oem=argv[++i];
         else if (!strcmp(argv[i],"-v")) opt.verbose=1;
-        else { printf("mkfs.fat: bad flag '%s'\n", argv[i]); return 2; }
+        else { app_printf("mkfs.fat: bad flag '%s'\n", argv[i]); return 2; }
     }
 
     int rc = mkfs_fat_format(&opt);
-    if (rc==0) printf("Formatted FAT%s on %s (%s)\n",
+    if (rc==0) app_printf("Formatted FAT%s on %s\n",
                       (opt.fat_type<0?"(auto)":(opt.fat_type==32?"32":(opt.fat_type==16?"16":"12"))),
-                      dev, path);
+                      dev);
     return rc;
 }

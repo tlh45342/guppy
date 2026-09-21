@@ -86,6 +86,8 @@ static const vdisk_driver_t *driver_for(vdisk_format_t f) {
     switch(f) {
         case VDISK_FMT_RAW:return &vdisk_raw_driver;
         case VDISK_FMT_VDI:return &vdisk_vdi_driver;
+        case VDISK_FMT_VMDK:return &vdisk_vmdk_driver;
+        case VDISK_FMT_VHD:return &vdisk_vhd_driver;
         default:return NULL;
     }
 }
@@ -117,21 +119,29 @@ int vdisk_open(const char *path,vdisk_format_t format,vdisk_t **out) {
     if(drv->open(d)!=0){vdisk_close(d);return -1;}
     *out=d; return 0;
 }
-int vdisk_create(const char *path,vdisk_format_t format,uint64_t n,vdisk_t **out) {
+int vdisk_create_ex(const char *path,vdisk_format_t format,uint64_t n,
+                    unsigned flags,vdisk_t **out) {
     vdisk_t *d; const vdisk_driver_t *drv;
+    int rc;
     if(!path||!out||!n) return -1;
+    if(flags & ~(VDISK_CREATE_SPARSE|VDISK_CREATE_VMDK_LAYOUT_MASK)) return -1;
     *out=NULL;
     if(format==VDISK_FMT_AUTO) {
         format=vdisk_format_from_extension(path);
         if(format==VDISK_FMT_AUTO)format=VDISK_FMT_RAW;
     }
     drv=driver_for(format); if(!drv)return -1;
+    if((flags & VDISK_CREATE_SPARSE) && !drv->create_sparse) return -1;
     d=(vdisk_t*)calloc(1,sizeof(*d)); if(!d)return -1;
-    d->path=dupstr(path); d->driver=drv; d->format=format; d->writable=true;
+    d->path=dupstr(path); d->driver=drv; d->format=format; d->writable=true; d->create_flags=flags;
     if(!d->path){free(d);return -1;}
     d->fp=fopen(path,"wb+"); if(!d->fp){vdisk_close(d);return -1;}
-    if(drv->create(d,n)!=0){vdisk_close(d);return -1;}
+    rc=(flags & VDISK_CREATE_SPARSE) ? drv->create_sparse(d,n) : drv->create(d,n);
+    if(rc!=0){vdisk_close(d);return -1;}
     *out=d; return 0;
+}
+int vdisk_create(const char *path,vdisk_format_t format,uint64_t n,vdisk_t **out) {
+    return vdisk_create_ex(path,format,n,0,out);
 }
 void vdisk_close(vdisk_t*d) {
     if(!d)return;
@@ -152,3 +162,82 @@ uint64_t vdisk_get_size(const vdisk_t*d){return d?d->size_bytes:0;}
 bool vdisk_is_writable(const vdisk_t*d){return d?d->writable:false;}
 vdisk_format_t vdisk_get_format(const vdisk_t*d){return d?d->format:VDISK_FMT_AUTO;}
 const char *vdisk_get_path(const vdisk_t*d){return d?d->path:NULL;}
+
+
+static int read_at(FILE *fp, uint64_t off, void *buf, size_t n) {
+    return vdisk_host_read(fp,off,buf,n);
+}
+
+int vdisk_inspect(const char *path, vdisk_info_t *info) {
+    FILE *fp;
+    unsigned char head[512];
+    unsigned char tail[512];
+    uint64_t host_size=0;
+    size_t got;
+    int rc=-1;
+
+    if(!path || !info) return -1;
+    memset(info,0,sizeof(*info));
+    fp=fopen(path,"rb");
+    if(!fp) return -1;
+    if(vdisk_host_get_size(fp,&host_size)!=0) goto done;
+    info->host_size_bytes=host_size;
+
+    memset(head,0,sizeof head);
+    if(vdisk_host_seek(fp,0)!=0) goto done;
+    got=fread(head,1,sizeof head,fp);
+
+    /* VDI signature is at byte 0x40. */
+    if(got>=0x44 && (uint32_t)head[0x40] |
+       ((uint32_t)head[0x41]<<8) | ((uint32_t)head[0x42]<<16) |
+       ((uint32_t)head[0x43]<<24)) {
+        uint32_t sig=(uint32_t)head[0x40] | ((uint32_t)head[0x41]<<8) |
+                     ((uint32_t)head[0x42]<<16) | ((uint32_t)head[0x43]<<24);
+        if(sig==0xBEDA107FU) {
+            rc=vdisk_vdi_inspect(fp,info);
+            goto done;
+        }
+    }
+
+    /* QCOW/QCOW2 magic: 'QFI\xfb'. */
+    if(got>=4 && head[0]=='Q' && head[1]=='F' && head[2]=='I' && head[3]==0xfb) {
+        info->format=VDISK_FMT_QCOW2;
+        info->supported=false;
+        strcpy(info->variant,"recognized");
+        info->checks_passed=1;
+        rc=0; goto done;
+    }
+
+    /* VMware sparse VMDK magic is little-endian 0x564d444b => "KDMV". */
+    if(got>=4 && head[0]=='K' && head[1]=='D' && head[2]=='M' && head[3]=='V') {
+        info->format=VDISK_FMT_VMDK;
+        info->supported=false;
+        strcpy(info->variant,"sparse");
+        info->checks_passed=1;
+        rc=0; goto done;
+    }
+    /* Text descriptor VMDK. */
+    if(got>=20 && memcmp(head,"# Disk DescriptorFile",20)==0) {
+        rc=vdisk_vmdk_inspect(path,fp,info);
+        goto done;
+    }
+
+    /* Legacy VHD has a 512-byte footer with cookie "conectix". */
+    if(host_size>=512 && read_at(fp,host_size-512,tail,sizeof tail)==0 &&
+       memcmp(tail,"conectix",8)==0) {
+        rc=vdisk_vhd_inspect(fp,info);
+        goto done;
+    }
+
+    info->format=VDISK_FMT_RAW;
+    info->supported=true;
+    strcpy(info->variant,"plain/raw candidate");
+    info->logical_size_bytes=host_size;
+    info->sector_size=512;
+    info->checks_passed=1;
+    info->structurally_valid=true;
+    rc=0;
+done:
+    fclose(fp);
+    return rc;
+}

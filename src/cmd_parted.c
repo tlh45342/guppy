@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <sys/types.h> // For Linux?  Grywin didn't barff
 
+#include "app_printf.h"
 #include "cmds.h"  // declare: int cmd_parted(int argc, char** argv);
 
 #ifndef SECTOR_SIZE
@@ -73,7 +74,7 @@ typedef struct {
     uint64_t first_lba;
     uint64_t last_lba;
     uint64_t attrs;
-    uint16_t name_utf16[72];    // UTF-16LE, not necessarily NUL-terminated
+    uint16_t name_utf16[36];    // UTF-16LE, 72 bytes per GPT spec
 } gpt_entry_t;
 #pragma pack(pop)
 
@@ -83,10 +84,10 @@ static void print_guid_le(const uint8_t g[16]) {
     uint32_t d1 = (uint32_t)(g[3]<<24 | g[2]<<16 | g[1]<<8 | g[0]);
     uint16_t d2 = (uint16_t)(g[5]<<8 | g[4]);
     uint16_t d3 = (uint16_t)(g[7]<<8 | g[6]);
-    printf("%08x-%04x-%04x-", d1, d2, d3);
-    for (int i=8;i<10;i++) printf("%02x", g[i]);
-    printf("-");
-    for (int i=10;i<16;i++) printf("%02x", g[i]);
+    app_printf("%08x-%04x-%04x-", d1, d2, d3);
+    for (int i=8;i<10;i++) app_printf("%02x", g[i]);
+    app_printf("-");
+    for (int i=10;i<16;i++) app_printf("%02x", g[i]);
 }
 
 static void utf16le_to_utf8(const uint16_t *in, size_t in_len, char *out, size_t out_sz) {
@@ -140,14 +141,14 @@ static bool is_all_zero(const uint8_t *p, size_t n) {
 // --- printing ---
 
 static void print_mbr(const mbr_t *m) {
-    printf("Partition Table: MBR\n");
+    app_printf("Partition Table: MBR\n");
     for (int i=0;i<4;i++) {
         const mbr_part_t *p = &m->part[i];
         if (p->type == 0x00 || (p->start_lba==0 && p->sectors==0))
             continue;
         uint32_t start = le32(&p->start_lba);
         uint32_t count = le32(&p->sectors);
-        printf("  %d: %s  Boot:%s  Type:0x%02x (%s)  Start LBA:%" PRIu32 "  Sectors:%" PRIu32 "  Size:%.2f MiB\n",
+        app_printf("  %d: %s  Boot:%s  Type:0x%02x (%s)  Start LBA:%" PRIu32 "  Sectors:%" PRIu32 "  Size:%.2f MiB\n",
                i+1,
                (p->type==0x05 || p->type==0x0f) ? "Extended" : "Primary",
                (p->boot_indicator==0x80) ? "Yes":"No",
@@ -164,11 +165,11 @@ static bool looks_like_gpt_header(const gpt_header_t *h) {
 }
 
 static void print_gpt(FILE *f, const gpt_header_t *gh) {
-    printf("Partition Table: GPT\n");
-    printf("  Disk GUID: "); print_guid_le(gh->disk_guid); printf("\n");
-    printf("  Usable LBAs: %" PRIu64 " .. %" PRIu64 "\n",
+    app_printf("Partition Table: GPT\n");
+    app_printf("  Disk GUID: "); print_guid_le(gh->disk_guid); app_printf("\n");
+    app_printf("  Usable LBAs: %" PRIu64 " .. %" PRIu64 "\n",
            le64(&gh->first_usable_lba), le64(&gh->last_usable_lba));
-    printf("  Entries @ LBA: %" PRIu64 "  Count: %" PRIu32 "  Size: %" PRIu32 "\n",
+    app_printf("  Entries @ LBA: %" PRIu64 "  Count: %" PRIu32 "  Size: %" PRIu32 "\n",
            le64(&gh->part_array_lba), le32(&gh->part_count), le32(&gh->part_entry_size));
 
     uint64_t tbl_lba = le64(&gh->part_array_lba);
@@ -192,13 +193,13 @@ static void print_gpt(FILE *f, const gpt_header_t *gh) {
             if (is_all_zero((const uint8_t*)e, sizeof(gpt_entry_t))) continue;
 
             char name[128];
-            utf16le_to_utf8(e->name_utf16, 72, name, sizeof(name));
+            utf16le_to_utf8(e->name_utf16, 36, name, sizeof(name));
 
-            printf("  %2" PRIu64 ": ", idx+1);
-            if (name[0]) printf("Name=\"%s\"  ", name);
-            printf("Type="); print_guid_le(e->type_guid);
-            printf("  UUID="); print_guid_le(e->unique_guid);
-            printf("\n      First LBA:%" PRIu64 "  Last LBA:%" PRIu64 "  Attr:0x%016" PRIx64 "  Size:%.2f MiB\n",
+            app_printf("  %2" PRIu64 ": ", idx+1);
+            if (name[0]) app_printf("Name=\"%s\"  ", name);
+            app_printf("Type="); print_guid_le(e->type_guid);
+            app_printf("  UUID="); print_guid_le(e->unique_guid);
+            app_printf("\n      First LBA:%" PRIu64 "  Last LBA:%" PRIu64 "  Attr:0x%016" PRIx64 "  Size:%.2f MiB\n",
                    le64(&e->first_lba), le64(&e->last_lba), le64(&e->attrs),
                    (double)((le64(&e->last_lba) - le64(&e->first_lba) + 1) * SECTOR_SIZE) / (1024.0*1024.0));
         }
@@ -226,8 +227,8 @@ static int do_parted_list(const char *path) {
     uint8_t s0[SECTOR_SIZE], s1[SECTOR_SIZE];
     if (!read_lba(f, 0, s0, SECTOR_SIZE)) { fclose(f); return 2; }
 
-    printf("%s:\n", path);
-    printf("  Size: %" PRIu64 " bytes (%.2f MiB), Sectors: %" PRIu64 ", Sector size: %d\n",
+    app_printf("%s:\n", path);
+    app_printf("  Size: %" PRIu64 " bytes (%.2f MiB), Sectors: %" PRIu64 ", Sector size: %d\n",
            (uint64_t)fsz, (double)fsz/(1024.0*1024.0), total_sectors, SECTOR_SIZE);
 
     const mbr_t *m = (const mbr_t*)s0;
@@ -267,7 +268,7 @@ static int do_parted_list(const char *path) {
     }
 
     if (!printed_table) {
-        printf("Partition Table: (none detected)\n");
+        app_printf("Partition Table: (none detected)\n");
     }
 
     fclose(f);
@@ -278,7 +279,7 @@ static int do_parted_list(const char *path) {
 // Usage: parted -l <image>
 int cmd_parted(int argc, char **argv) {
     if (argc < 2 || strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
-        printf("Usage: parted -l <disk.img>\n");
+        app_printf("Usage: parted -l <disk.img>\n");
         return 0;
     }
     if (strcmp(argv[1], "-l") != 0) {

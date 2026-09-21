@@ -5,12 +5,13 @@
 #include <errno.h>
 
 #include "debug.h"
+#include "app_printf.h"
 #ifndef DBG
 #define DBG(...) do{}while(0)
 #endif
 
 static void usage(void) {
-    printf("usage: lcat <file>\n");
+    app_printf("usage: lcat <file>\n");
 }
 
 int cmd_lcat(int argc, char **argv) {
@@ -26,7 +27,7 @@ int cmd_lcat(int argc, char **argv) {
     char buf[8192];
     size_t n;
     while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
-        if (fwrite(buf, 1, n, stdout) != n) {
+        if (app_write(buf, n) != n) {
             fprintf(stderr, "lcat: write error\n");
             fclose(f);
             return 1;

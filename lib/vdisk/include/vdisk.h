@@ -18,8 +18,46 @@ typedef enum {
 
 typedef struct vdisk vdisk_t;
 
+typedef struct {
+    vdisk_format_t format;
+    uint64_t host_size_bytes;
+    uint64_t logical_size_bytes;
+    uint64_t data_offset;
+    uint64_t blocks_offset;
+    uint32_t image_type;
+    uint32_t sector_size;
+    uint32_t block_size;
+    uint32_t blocks_count;
+    uint32_t blocks_allocated;
+    uint32_t map_allocated_entries;
+    uint32_t map_unallocated_entries;
+    uint32_t map_invalid_entries;
+    uint32_t map_duplicate_entries;
+    unsigned checks_passed;
+    unsigned checks_failed;
+    bool supported;
+    bool structurally_valid;
+    char variant[32];
+} vdisk_info_t;
+
+/* Inspect container bytes without trusting the filename extension.
+   This operation is read-only. Recognized-but-unsupported formats are
+   reported with supported=false. */
+int vdisk_inspect(const char *path, vdisk_info_t *info);
+
+
+#define VDISK_CREATE_SPARSE                0x00000001u
+#define VDISK_CREATE_VMDK_LAYOUT_MASK      0x00000f00u
+#define VDISK_CREATE_VMDK_FLAT             0x00000100u
+#define VDISK_CREATE_VMDK_MONOLITHIC_FLAT  0x00000200u
+#define VDISK_CREATE_VMDK_MONOLITHIC_SPARSE 0x00000300u
+#define VDISK_CREATE_VMDK_SPLIT_FLAT       0x00000400u
+#define VDISK_CREATE_VMDK_SPLIT_SPARSE     0x00000500u
+
 int vdisk_open(const char *path, vdisk_format_t format, vdisk_t **out);
 int vdisk_create(const char *path, vdisk_format_t format, uint64_t size_bytes, vdisk_t **out);
+int vdisk_create_ex(const char *path, vdisk_format_t format, uint64_t size_bytes,
+                    unsigned flags, vdisk_t **out);
 void vdisk_close(vdisk_t *disk);
 
 int vdisk_read(vdisk_t *disk, uint64_t offset, void *buf, size_t len);

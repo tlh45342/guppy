@@ -26,6 +26,7 @@ extern int    g_vblk_count;
 const vblk_t *vblk_by_name(const char *name);
 int  vblk_register(const vblk_t *entry);
 void vblk_clear(void);
+int  vblk_remove_children(const char *parent_name);
 
 /* Canonical device-relative I/O API. Partition translation occurs here. */
 bool vblk_read_bytes(vblk_t *dev, uint64_t off, uint32_t len, void *dst);

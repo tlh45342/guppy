@@ -1,0 +1,46 @@
+logfile symlink-test.log
+create symlink-test.img 16M
+use -i symlink-test.img /dev/a
+gpt init /dev/a
+gpt add /dev/a linuxfs rootfs 2048 32734
+partscan /dev/a
+mkfs.ext2 /dev/a1
+mount /dev/a1 /target
+
+mkdir -p /target/usr/bin
+mkdir -p /target/usr/sbin
+mkdir -p /target/usr/lib
+mkdir -p /target/etc
+
+echo symlink-tool > /target/usr/bin/tool
+echo debmin-init > /target/usr/sbin/init
+echo os-release-data > /target/usr/lib/os-release
+
+; relative directory symlink used as an intermediate pathname component
+ln -s usr/bin /target/bin
+ln -s usr/sbin /target/sbin
+
+; relative file symlink with .. in the stored target
+ln -s ../usr/lib/os-release /target/etc/os-release
+
+; readlink must inspect the final link itself
+readlink /target/bin
+readlink /target/sbin
+readlink /target/etc/os-release
+
+; stat follows the final symlink (POSIX stat semantics)
+stat /target/bin
+stat /target/etc/os-release
+
+; intermediate symlink traversal -- the DEBMIN3 failure case
+stat /target/sbin/init
+cat /target/sbin/init
+stat /target/bin/tool
+cat /target/bin/tool
+
+; chained symlink traversal
+ln -s bin /target/tools
+stat /target/tools/tool
+cat /target/tools/tool
+
+logfile off

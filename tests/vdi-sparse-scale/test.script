@@ -1,0 +1,11 @@
+logfile vdi-sparse-scale.log
+create --sparse scale.vdi 1G
+diskq scale.vdi
+use -i scale.vdi /dev/a
+gpt init /dev/a
+gpt add /dev/a --type biosboot --name bios --start 1M --size 1M
+gpt add /dev/a --type linuxfs --name rootfs --start 2M --size 100%
+partscan /dev/a
+gpt print /dev/a
+diskq scale.vdi
+logfile off

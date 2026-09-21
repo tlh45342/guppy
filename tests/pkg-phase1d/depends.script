@@ -1,0 +1,3 @@
+logfile pkg-depends.log
+pkg depends local:control-test.deb
+logfile off

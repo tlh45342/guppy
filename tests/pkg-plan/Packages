@@ -1,0 +1,67 @@
+Package: coreutils
+Version: 9.7-3
+Architecture: amd64
+Pre-Depends: libacl1 (>= 2.3), libattr1, libc6 (>= 2.38), libcap2, libgmp10, libselinux1, libssl3t64, libsystemd0
+Filename: pool/main/c/coreutils/coreutils_9.7-3_amd64.deb
+Size: 3000000
+SHA256: 1111111111111111111111111111111111111111111111111111111111111111
+
+Package: libacl1
+Version: 2.3.2-2
+Architecture: amd64
+Depends: libc6 (>= 2.38), libattr1
+Filename: pool/main/a/acl/libacl1_2.3.2-2_amd64.deb
+
+Package: libattr1
+Version: 1:2.5.2-3
+Architecture: amd64
+Depends: libc6 (>= 2.38)
+Filename: pool/main/a/attr/libattr1_2.5.2-3_amd64.deb
+
+Package: libc6
+Version: 2.41-12+deb13u3
+Architecture: amd64
+Depends: libgcc-s1
+Filename: pool/main/g/glibc/libc6_2.41-12+deb13u3_amd64.deb
+
+Package: libgcc-s1
+Version: 14.2.0-19
+Architecture: amd64
+Depends: libc6 (>= 2.35)
+Filename: pool/main/g/gcc-14/libgcc-s1_14.2.0-19_amd64.deb
+
+Package: libcap2
+Version: 1:2.66-5
+Architecture: amd64
+Depends: libc6 (>= 2.38)
+Filename: pool/main/libc/libcap2/libcap2_2.66-5_amd64.deb
+
+Package: libgmp10
+Version: 2:6.3.0+dfsg-3
+Architecture: amd64
+Depends: libc6 (>= 2.38)
+Filename: pool/main/g/gmp/libgmp10_6.3.0+dfsg-3_amd64.deb
+
+Package: libselinux1
+Version: 3.8.1-1
+Architecture: amd64
+Depends: libc6 (>= 2.38)
+Filename: pool/main/libs/libselinux/libselinux1_3.8.1-1_amd64.deb
+
+Package: libssl3t64
+Version: 3.5.1-1
+Architecture: amd64
+Depends: libc6 (>= 2.38), openssl-provider-legacy
+Filename: pool/main/o/openssl/libssl3t64_3.5.1-1_amd64.deb
+
+Package: openssl-provider-legacy
+Version: 3.5.1-1
+Architecture: amd64
+Depends: libssl3t64 (= 3.5.1-1)
+Filename: pool/main/o/openssl/openssl-provider-legacy_3.5.1-1_amd64.deb
+
+Package: libsystemd0
+Version: 257.8-1~deb13u2
+Architecture: amd64
+Depends: libc6 (>= 2.38)
+Filename: pool/main/s/systemd/libsystemd0_257.8-1~deb13u2_amd64.deb

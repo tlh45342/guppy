@@ -38,8 +38,12 @@
 #define VFS_S_IFMT   0170000
 #define VFS_S_IFREG  0100000
 #define VFS_S_IFDIR  0040000
+#define VFS_S_IFCHR  0020000
+#define VFS_S_IFBLK  0060000
 #define VFS_S_IFLNK  0120000
 #define VFS_S_ISDIR(m) (((m) & VFS_S_IFMT) == VFS_S_IFDIR)
+#define VFS_S_ISCHR(m) (((m) & VFS_S_IFMT) == VFS_S_IFCHR)
+#define VFS_S_ISBLK(m) (((m) & VFS_S_IFMT) == VFS_S_IFBLK)
 #define VFS_S_ISREG(m) (((m) & VFS_S_IFMT) == VFS_S_IFREG)
 #define VFS_S_ISLNK(m) (((m) & VFS_S_IFMT) == VFS_S_IFLNK)
 
@@ -109,10 +113,22 @@ typedef struct super_ops {
     void (*kill_sb)(struct superblock*);
 } super_ops_t;
 
+typedef struct vfs_iattr {
+    uint32_t valid;
+    uint32_t mode;
+    uint32_t uid;
+    uint32_t gid;
+} vfs_iattr_t;
+
+#define VFS_IATTR_MODE 0x0001u
+#define VFS_IATTR_UID  0x0002u
+#define VFS_IATTR_GID  0x0004u
+
 typedef struct inode_ops {
     int   (*lookup)(struct inode* dir, const char *name, struct inode **out);
     int   (*create)(struct inode* dir, const char *name, uint32_t mode, struct inode **out);
     int   (*mkdir)(struct inode* dir, const char *name, uint32_t mode);
+    int   (*mknod)(struct inode* dir, const char *name, uint32_t mode, uint32_t major, uint32_t minor);
     int   (*rmdir)(struct inode* dir, const char *name);
     int   (*unlink)(struct inode* dir, const char *name);
     int   (*rename)(struct inode* odir, const char *on,
@@ -206,7 +222,9 @@ int     vfs_close(struct file *f);
 ssize_t vfs_read(struct file *f, void *buf, size_t n);
 ssize_t vfs_write(struct file *f, const void *buf, size_t n);
 int     vfs_mkdir(const char *path, unsigned mode);
+int     vfs_mknod(const char *path, uint32_t mode, uint32_t major, uint32_t minor);
 int     vfs_unlink(const char *path);
+int     vfs_symlink(const char *target, const char *linkpath);
 int     vfs_readlink(const char *path, char *buf, size_t bufsz);
 ssize_t vfs_getdents64(struct file *f, void *buf, size_t bytes);
 
@@ -214,3 +232,4 @@ ssize_t vfs_getdents64(struct file *f, void *buf, size_t bytes);
 int     vfs_stat(const char *path, struct g_stat *st);
 int     vfs_statfs(const char *path, struct g_statvfs *svfs);
 int     vfs_chmod(const char *path, uint32_t mode);
+int     vfs_chown(const char *path, uint32_t uid, uint32_t gid);

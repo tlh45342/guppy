@@ -1,0 +1,6 @@
+logfile pkg-xz-embedded.log
+use -i H:\debian-13.6.0-amd64-netinst.iso /dev/b
+mount /dev/b /iso
+pkg info /iso/pool/main/b/base-files/base-files_13.8+deb13u6_amd64.deb
+pkg contents /iso/pool/main/b/base-files/base-files_13.8+deb13u6_amd64.deb
+logfile off

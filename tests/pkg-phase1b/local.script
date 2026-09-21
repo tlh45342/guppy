@@ -1,0 +1,4 @@
+logfile pkg-local.log
+pkg info local:test.deb
+pkg contents local:test.deb
+logfile off

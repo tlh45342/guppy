@@ -1,0 +1,5 @@
+# Paths are relative to tests/.
+#
+# .img, .vdi, .raw, .vhd and .log are disposable regression artifacts by
+# default.  If a future test deliberately checks in one of those file types as
+# an input/fixture, list it here so `make clean` preserves it.

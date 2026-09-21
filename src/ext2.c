@@ -807,6 +807,67 @@ int ext2_mkdir_at(vblk_t *dev, const char *path, uint16_t mode) {
     return ext2_store_meta(dev, &m);
 }
 
+/* Linux EXT2 special inodes store the encoded device number in i_block[].
+ * Use the historical 8:8 encoding when possible for compatibility; otherwise
+ * use Linux's "new" 12:20 encoding in i_block[1]. */
+static uint32_t ext2_old_encode_dev(uint32_t major, uint32_t minor) {
+    return (major << 8) | minor;
+}
+
+static uint32_t ext2_new_encode_dev(uint32_t major, uint32_t minor) {
+    return (minor & 0xffu) | (major << 8) | ((minor & ~0xffu) << 12);
+}
+
+int ext2_mknod_at(vblk_t *dev, const char *path, uint16_t mode,
+                  uint32_t major, uint32_t minor) {
+    ext2_meta m;
+    uint16_t type = (uint16_t)(mode & 0170000u);
+    uint8_t dir_type;
+    int rc;
+
+    if (!dev || !path || !*path) return -1;
+    if (type == 0020000u) dir_type = 3;       /* EXT2_FT_CHRDEV */
+    else if (type == 0060000u) dir_type = 4;  /* EXT2_FT_BLKDEV */
+    else return -2;
+    if (major > 0xfffu || minor > 0xfffffu) return -3;
+
+    rc = ext2_load_meta(dev, &m);
+    if (rc != 0) return -10 + rc;
+
+    char parent[512], name[256];
+    if (split_parent_name(path, parent, sizeof parent, name, sizeof name) != 0) return -20;
+    uint32_t parent_ino = 0;
+    if (ext2_resolve_path_at(dev, &m, parent, &parent_ino) != 0) return -21;
+    rc = ext2_find_entry_at(dev, &m, parent_ino, name, NULL, NULL);
+    if (rc == 1) return -22;
+    if (rc < 0) return -23;
+
+    uint32_t ino = ext2_alloc_inode(dev, &m);
+    if (!ino) return -24;
+
+    ext2_inode node;
+    memset(&node, 0, sizeof node);
+    node.i_mode = (uint16_t)(type | (mode & 07777u));
+    node.i_links_count = 1;
+    node.i_atime = node.i_ctime = node.i_mtime = (uint32_t)time(NULL);
+    node.i_size = 0;
+    node.i_blocks = 0;
+    if (major < 256u && minor < 256u)
+        node.i_block[0] = ext2_old_encode_dev(major, minor);
+    else
+        node.i_block[1] = ext2_new_encode_dev(major, minor);
+
+    if (ext2_write_inode_at(dev, &m, ino, &node) != 0) {
+        (void)ext2_free_inode_num(dev, &m, ino);
+        return -25;
+    }
+    if (ext2_append_dirent_at(dev, &m, parent_ino, ino, dir_type, name) < 0) {
+        (void)ext2_free_inode_num(dev, &m, ino);
+        return -26;
+    }
+    return 0;
+}
+
 static int ext2_free_inode_data_blocks(vblk_t *dev,
                                        ext2_meta *m, const ext2_inode *file) {
     if (file->i_block[14]) return -1; /* triple-indirect addressing is outside the current scope; see FUTURE.md */
@@ -937,6 +998,102 @@ int ext2_truncate_at(vblk_t *dev, const char *path, uint64_t size)
 /* Write new data into an existing regular-file inode.  The pathname and inode
    are preserved; only file data/size/timestamps change.  If the inode still
    owns blocks, truncate it first so this routine is safe when called directly. */
+int ext2_read_file_at(vblk_t *dev, const char *path,
+                      uint8_t **data_out, size_t *len_out)
+{
+    if (!dev || !path || !data_out || !len_out) return -1;
+    *data_out = NULL;
+    *len_out = 0;
+
+    ext2_meta m;
+    if (ext2_load_meta(dev, &m) != 0) return -2;
+
+    uint32_t ino = 0;
+    if (ext2_resolve_path_at(dev, &m, path, &ino) != 0 || ino == 0) return -3;
+
+    ext2_inode file;
+    if (ext2_read_inode_at(dev, &m, ino, &file) != 0) return -4;
+    if ((file.i_mode & 0170000) == 0040000) return -5;
+    if (file.i_block[14]) return -6; /* triple-indirect not supported */
+
+    size_t len = (size_t)file.i_size;
+    uint8_t *out = (uint8_t*)malloc(len ? len : 1u);
+    if (!out) return -7;
+    if (len == 0) {
+        *data_out = out;
+        *len_out = 0;
+        return 0;
+    }
+
+    const uint32_t ptrs = m.block_size / sizeof(uint32_t);
+    uint32_t *single = (uint32_t*)calloc(ptrs, sizeof(uint32_t));
+    uint32_t *droot  = (uint32_t*)calloc(ptrs, sizeof(uint32_t));
+    uint32_t *dleaf  = (uint32_t*)calloc(ptrs, sizeof(uint32_t));
+    if (!single || !droot || !dleaf) {
+        free(single); free(droot); free(dleaf); free(out);
+        return -8;
+    }
+
+    if (file.i_block[12] &&
+        !pread_block(dev, m.block_size, file.i_block[12], single, m.block_size)) {
+        free(single); free(droot); free(dleaf); free(out);
+        return -9;
+    }
+    if (file.i_block[13] &&
+        !pread_block(dev, m.block_size, file.i_block[13], droot, m.block_size)) {
+        free(single); free(droot); free(dleaf); free(out);
+        return -10;
+    }
+
+    uint32_t cached_outer = UINT32_MAX;
+    size_t done = 0;
+    while (done < len) {
+        uint64_t lbn = (uint64_t)done / m.block_size;
+        uint32_t disk_block = 0;
+
+        if (lbn < 12u) {
+            disk_block = file.i_block[lbn];
+        } else if (lbn < 12ull + ptrs) {
+            disk_block = single[(uint32_t)(lbn - 12u)];
+        } else {
+            uint64_t rel = lbn - 12ull - ptrs;
+            uint32_t outer = (uint32_t)(rel / ptrs);
+            uint32_t inner = (uint32_t)(rel % ptrs);
+            if (outer >= ptrs) {
+                free(single); free(droot); free(dleaf); free(out);
+                return -11;
+            }
+            if (cached_outer != outer) {
+                memset(dleaf, 0, m.block_size);
+                uint32_t leaf_block = droot[outer];
+                if (leaf_block &&
+                    !pread_block(dev, m.block_size, leaf_block, dleaf, m.block_size)) {
+                    free(single); free(droot); free(dleaf); free(out);
+                    return -12;
+                }
+                cached_outer = outer;
+            }
+            disk_block = dleaf[inner];
+        }
+
+        size_t chunk = m.block_size;
+        if (chunk > len - done) chunk = len - done;
+        if (disk_block == 0) {
+            memset(out + done, 0, chunk);
+        } else if (!pread_bytes_at(dev, (uint64_t)disk_block * m.block_size,
+                                   out + done, (uint32_t)chunk)) {
+            free(single); free(droot); free(dleaf); free(out);
+            return -13;
+        }
+        done += chunk;
+    }
+
+    free(single); free(droot); free(dleaf);
+    *data_out = out;
+    *len_out = len;
+    return 0;
+}
+
 int ext2_write_existing_at(vblk_t *dev,
                            const char *path, const void *data, size_t len)
 {
@@ -1237,3 +1394,75 @@ fail:
 #undef ALLOC_BLOCK
 }
 
+
+
+/*
+ * Create an EXT2 fast symlink.  Short symlink targets are stored directly
+ * in i_block[] and consume no data block.  This covers Debian base-files'
+ * usr-merge and common-license links and is the normal EXT2 representation
+ * for these short targets.
+ */
+int ext2_symlink_at(vblk_t *dev, const char *path, const char *target)
+{
+    ext2_meta m;
+    char parent[512], name[256];
+    uint32_t parent_ino = 0, existing = 0, ino;
+    ext2_inode link;
+    size_t n;
+    int exists;
+
+    if (!dev || !path || !target) return -1;
+    n = strlen(target);
+    if (n == 0 || n > sizeof(link.i_block)) return -2;
+
+    if (ext2_load_meta(dev, &m) != 0) return -3;
+    if (split_parent_name(path, parent, sizeof parent, name, sizeof name) != 0)
+        return -4;
+    if (ext2_resolve_path_at(dev, &m, parent, &parent_ino) != 0)
+        return -5;
+
+    exists = ext2_find_entry_at(dev, &m, parent_ino, name, &existing, NULL);
+    if (exists == 1) return -6;
+    if (exists < 0) return -7;
+
+    ino = ext2_alloc_inode(dev, &m);
+    if (!ino) return -8;
+
+    memset(&link, 0, sizeof link);
+    link.i_mode = (uint16_t)(0120000 | 0777);
+    link.i_links_count = 1;
+    link.i_size = (uint32_t)n;
+    link.i_atime = link.i_ctime = link.i_mtime = (uint32_t)time(NULL);
+    link.i_blocks = 0; /* fast symlink: target lives in i_block[] */
+    memcpy(link.i_block, target, n);
+
+    if (ext2_write_inode_at(dev, &m, ino, &link) != 0) return -9;
+    if (ext2_append_dirent_at(dev, &m, parent_ino, ino, 7, name) < 0)
+        return -10;
+
+    return 0;
+}
+
+
+int ext2_readlink_at(vblk_t *dev, const char *path, char *buf, size_t bufsz)
+{
+    ext2_meta m;
+    ext2_inode in;
+    uint32_t ino;
+    size_t n;
+
+    if (!dev || !path || !buf || bufsz == 0) return -1;
+    if (ext2_load_meta(dev, &m) != 0) return -2;
+    if (ext2_resolve_path_at(dev, &m, path, &ino) != 0)
+        return -3;
+    if (ext2_read_inode_at(dev, &m, ino, &in) != 0)
+        return -4;
+
+    if ((in.i_mode & 0170000u) != 0120000u) return -5;
+    if (in.i_size > sizeof in.i_block) return -6; /* Phase 1G: fast symlinks */
+    n = (size_t)in.i_size;
+    if (n >= bufsz) n = bufsz - 1u;
+    memcpy(buf, in.i_block, n);
+    buf[n] = 0;
+    return (int)n;
+}

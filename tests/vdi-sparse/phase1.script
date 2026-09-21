@@ -1,0 +1,19 @@
+logfile vdi-sparse.log
+
+; Sparse VDI: large logical disk, tiny initial backing file.
+create --sparse sparse-test.vdi 64M
+use -i sparse-test.vdi /dev/a
+use
+
+; Exercise writes spread across the logical image through GPT + EXT2.
+gpt init /dev/a
+gpt add /dev/a linuxfs rootfs 2048 131038
+partscan /dev/a
+mkfs.ext2 /dev/a1 --label VDISPARSE
+mount /dev/a1 /target
+mkdir -p /target/etc
+echo vdi-sparse-persistence > /target/etc/vdi-test.txt
+cat /target/etc/vdi-test.txt
+stat /target/etc/vdi-test.txt
+
+logfile off

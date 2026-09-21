@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "vfs.h"
+#include "app_printf.h"
 
 #define HEXDUMP_DEFAULT_LEN 256u
 #define HEXDUMP_MAX_LEN     (1024u * 1024u)
@@ -27,19 +28,19 @@ static int parse_u64(const char *s, uint64_t *out) {
 }
 
 static void print_line(uint64_t off, const uint8_t *buf, size_t n) {
-    printf("%08" PRIx64 "  ", off);
+    app_printf("%08" PRIx64 "  ", off);
     for (size_t i = 0; i < 16; ++i) {
-        if (i < n) printf("%02x ", buf[i]);
-        else       printf("   ");
-        if (i == 7) putchar(' ');
+        if (i < n) app_printf("%02x ", buf[i]);
+        else       app_printf("   ");
+        if (i == 7) app_printf(" ");
     }
-    printf(" |");
+    app_printf(" |");
     for (size_t i = 0; i < n; ++i) {
         unsigned char c = buf[i];
-        putchar((c >= 32 && c <= 126) ? c : '.');
+        app_printf("%c", (c >= 32 && c <= 126) ? c : '.');
     }
-    for (size_t i = n; i < 16; ++i) putchar(' ');
-    puts("|");
+    for (size_t i = n; i < 16; ++i) app_printf(" ");
+    app_printf("|\n");
 }
 
 int cmd_hexdump(int argc, char **argv) {

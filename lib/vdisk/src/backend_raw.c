@@ -34,6 +34,6 @@ static int raw_flush(vdisk_t*d){ return fflush(d->fp)==0?0:-1; }
 static void raw_close(vdisk_t*d){ (void)d; }
 
 const vdisk_driver_t vdisk_raw_driver = {
-    VDISK_FMT_RAW,"raw",raw_probe,raw_open,raw_create,
+    VDISK_FMT_RAW,"raw",raw_probe,raw_open,raw_create,NULL,
     raw_read,raw_write,raw_flush,raw_close
 };

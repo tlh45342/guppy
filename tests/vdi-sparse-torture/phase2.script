@@ -1,0 +1,5 @@
+logfile phase2.log
+diskq torture.vdi
+use -i torture.vdi /dev/a
+diskq torture.vdi
+logfile off

@@ -1,0 +1,4 @@
+logfile pkg-1a-output.log
+pkg info local:basic-test.deb
+pkg contents local:basic-test.deb
+logfile off

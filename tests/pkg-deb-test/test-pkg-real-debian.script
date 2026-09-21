@@ -1,0 +1,196 @@
+; Private Guppy real Debian repository/planner integration test
+; External prerequisite:
+;   H:\debian-13.6.0-amd64-netinst.iso
+;
+; This test creates its own disposable target image.
+; It does NOT require debmin3.vdi.
+
+logfile guppy-pkg-real-debian.log
+
+echo === create disposable package-planner target ===
+
+create --sparse pkg-real-debian.vdi 128M
+use -i pkg-real-debian.vdi /dev/a
+gpt init /dev/a
+gpt add /dev/a --type linuxfs --name rootfs --start 1M --size 100%
+partscan /dev/a
+mkfs.ext2 /dev/a1
+mount /dev/a1 /target
+
+echo === mount Debian 13.6 amd64 netinst ISO ===
+
+use -i H:\debian-13.6.0-amd64-netinst.iso /dev/b
+mount /dev/b /iso
+
+echo === seed target with known runtime closure ===
+
+pkg install /iso/pool/main/g/gcc-14/gcc-14-base_14.2.0-19_amd64.deb /target
+pkg install /iso/pool/main/g/gcc-14/libgcc-s1_14.2.0-19_amd64.deb /target
+pkg install /iso/pool/main/g/glibc/libc6_2.41-12+deb13u3_amd64.deb /target
+pkg install /iso/pool/main/m/mawk/mawk_1.3.4.20250131-1_amd64.deb /target
+
+echo === verify installed-state visibility ===
+
+pkg list-installed /target
+pkg status /target gcc-14-base
+pkg status /target libgcc-s1
+pkg status /target libc6
+pkg status /target mawk
+
+echo === register real Debian repository ===
+
+pkg repo add /iso
+pkg repo list
+
+echo === coreutils lookup ===
+
+pkg lookup coreutils
+pkg path coreutils
+
+echo === READ-ONLY dependency plan ===
+
+pkg plan coreutils /target
+
+echo === READ-ONLY maintainer-script scan ===
+
+pkg scripts coreutils
+
+echo === real Debian planner test complete ===
+
+pkg install coreutils /target
+
+pkg list-installed /target
+pkg status /target coreutils
+pkg status /target libacl1
+pkg status /target libattr1
+pkg status /target libcap2
+pkg status /target libgmp10
+pkg status /target libselinux1
+pkg status /target libssl3t64
+pkg status /target openssl-provider-legacy
+pkg status /target libsystemd0
+
+echo === READ-ONLY closure-wide maintainer-script audit ===
+
+pkg audit coreutils /target
+
+echo === real Debian package audit complete ===
+
+
+
+echo === ROUND 8 maintainer-script dissection ===
+echo === libc6 preinst ===
+pkg script libc6 preinst
+echo === libc6 postinst ===
+pkg script libc6 postinst
+echo === libc6 postrm ===
+pkg script libc6 postrm
+echo === libselinux1 postinst ===
+pkg script libselinux1 postinst
+echo === real Debian maintainer-script dissection complete ===
+echo === ROUND 9 configuration-primitives evidence ===
+
+echo === libc6 package control inventory ===
+pkg info /iso/pool/main/g/glibc/libc6_2.41-12+deb13u3_amd64.deb
+
+echo === libselinux1 package control inventory ===
+pkg info /iso/pool/main/libs/libselinux/libselinux1_3.8.1-1_amd64.deb
+
+echo === unpacked dpkg database layout ===
+ls -la /target/var/lib/dpkg
+ls -la /target/var/lib/dpkg/info
+
+echo === libselinux1 tmpfiles recipe ===
+cat /target/usr/lib/tmpfiles.d/libselinux1.conf
+
+echo === relevant filesystem layout after unpack, before configuration ===
+ls -la /target
+ls -la /target/usr/lib64
+ls -la /target/usr/lib/tmpfiles.d
+
+echo === ROUND 9 configuration-primitives evidence complete ===
+
+echo === ROUND 10 controlled offline configuration ===
+echo === libselinux1 trigger control ===
+cat /target/var/lib/dpkg/info/libselinux1.triggers
+echo === configure libselinux1 ===
+pkg configure libselinux1 /target
+pkg status /target libselinux1
+echo === verify tmpfiles result ===
+stat /target/run/setrans
+echo === pending no-await triggers ===
+cat /target/var/lib/dpkg/triggers/Unincorp
+echo === libc6 remains unpacked pending preinst/diversion support ===
+pkg status /target libc6
+echo === ROUND 10 controlled offline configuration complete ===
+
+echo === ROUND 11 controlled pre-unpack / diversion evidence ===
+echo === libc6 diversions recorded before payload unpack ===
+cat /target/var/lib/dpkg/diversions
+echo === identify ldconfig trigger consumer ===
+pkg lookup libc-bin
+pkg control-file libc-bin triggers
+pkg scripts libc-bin
+echo === libc6 remains unpacked pending controlled postinst support ===
+pkg status /target libc6
+echo === ROUND 11 controlled pre-unpack evidence complete ===
+
+echo === ROUND 12 libc6 controlled configure / trigger-interest evidence ===
+echo === exact libc-bin postinst ===
+pkg script libc-bin postinst
+echo === unpack libc-bin and register interest-await ldconfig ===
+pkg install libc-bin /target
+pkg status /target libc-bin
+echo === registered ldconfig trigger consumers ===
+cat /target/var/lib/dpkg/triggers/ldconfig
+echo === configure libc6 using controlled fresh-install semantics ===
+pkg configure libc6 /target
+pkg status /target libc6
+echo === pending no-await trigger activations ===
+cat /target/var/lib/dpkg/triggers/Unincorp
+echo === libc-bin remains unpacked; ldconfig trigger processing is next ===
+pkg status /target libc-bin
+echo === ROUND 12 libc6 controlled configure evidence complete ===
+
+echo === ROUND 13 libc-bin controlled configure / native ldconfig ===
+echo === trigger registry and pending activations before libc-bin configure ===
+pkg triggers /target
+echo === configure libc-bin without executing maintainer shell ===
+pkg configure libc-bin /target
+pkg status /target libc-bin
+echo === libc-bin fresh-install nsswitch result ===
+cat /target/etc/nsswitch.conf
+echo === native glibc dynamic-linker cache ===
+stat /target/etc/ld.so.cache
+pkg ldconfig-cache /target
+echo === process supported pending triggers ===
+pkg trigger-process /target
+echo === trigger state after processing; unsupported libc-upgrade remains durable ===
+pkg triggers /target
+cat /target/var/lib/dpkg/triggers/Unincorp
+echo === ROUND 13 libc-bin/native ldconfig evidence complete ===
+echo === ROUND 14 base-files controlled fresh pre-unpack ===
+echo === exact base-files preinst ===
+pkg script base-files preinst
+echo === install base-files through normal repository path ===
+pkg install base-files /target
+pkg status /target base-files
+echo === merged-/usr aliases after real base-files payload ===
+readlink /target/bin
+readlink /target/lib
+readlink /target/lib64
+readlink /target/sbin
+echo === diversion state after base-files ===
+cat /target/var/lib/dpkg/diversions
+echo === repeat public install should recognize base-files already present ===
+pkg install base-files /target
+pkg status /target base-files
+echo === ROUND 14 base-files controlled pre-unpack evidence complete ===
+echo === ROUND 15 gzip controlled fresh pre-unpack ===
+echo === exact gzip preinst ===
+pkg script gzip preinst
+echo === install gzip through normal repository path ===
+pkg install gzip /target
+pkg status /target gzip
+stat /target/usr/bin/gzip
+echo === ROUND 15 gzip controlled pre-unpack evidence complete ===

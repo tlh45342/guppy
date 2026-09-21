@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = configure ] && dpkg --compare-versions "$2" lt 0.9 ; then
+  rm -f /etc/config-demo/old.cache
+fi
+
+# Automatically added by dh_installtmpfiles/13.24.1
+if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ] ; then
+    if [ -x "$(command -v systemd-tmpfiles)" ]; then
+        systemd-tmpfiles ${DPKG_ROOT:+--root="$DPKG_ROOT"} --create config-demo.conf || true
+    fi
+fi
+# End automatically added section

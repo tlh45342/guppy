@@ -1,0 +1,9 @@
+logfile ext2-mknod-reopen.log
+use -i ext2-mknod.img /dev/a
+partscan /dev/a
+mount /dev/a1 /target
+stat /target/dev/console
+stat /target/dev/null
+stat /target/dev/zero
+stat /target/dev/example
+logfile off

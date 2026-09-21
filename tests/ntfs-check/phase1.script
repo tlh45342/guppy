@@ -1,0 +1,13 @@
+logfile ntfs-check.log
+
+; Independent NTFS structural-checker fixture.
+; Keep this RAW so the checker is validating NTFS/GPT, not a container backend.
+create ntfs-check.img 64M
+use -i ntfs-check.img /dev/a
+gpt init /dev/a
+gpt add /dev/a --type msbasic --name data --start 1MiB --size 100%
+partscan /dev/a
+mkfs.ntfs /dev/a1 -v
+gpt print /dev/a
+
+logfile off

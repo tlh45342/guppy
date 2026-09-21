@@ -1,0 +1,12 @@
+logfile -a vhd-fixed.log
+
+; Fresh Guppy process: reopen the VHD and prove persistence.
+use -i fixed-test.vhd /dev/a
+partscan /dev/a
+gpt print /dev/a
+mount /dev/a1 /target
+cat /target/etc/vhd-test.txt
+stat /target/etc/vhd-test.txt
+diskq fixed-test.vhd
+
+logfile off

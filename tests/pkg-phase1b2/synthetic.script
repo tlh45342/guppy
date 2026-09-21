@@ -1,0 +1,2 @@
+pkg info local:xz-test.deb
+pkg contents local:xz-test.deb

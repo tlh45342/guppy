@@ -1,0 +1,3 @@
+logfile pkg-control-output.log
+pkg control local:control-test.deb
+logfile off

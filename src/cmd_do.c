@@ -6,6 +6,7 @@
 
 #include "cmds.h"      // run_command_line, GUPPY_RC_EXIT, guppy_exit_requested()
 #include "helper.h"   // rstrip, is_blank_or_comment
+#include "logfile.h"
 
 int cmd_do(int argc, char **argv) {
     if (argc < 2) {
@@ -43,6 +44,7 @@ int cmd_do(int argc, char **argv) {
         if (is_blank_or_comment(line)) continue;
 
         if (verbose) printf(">> %s\n", line);
+        guppy_log_command(line);
 
         rc = run_command_line(line);
 

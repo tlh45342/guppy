@@ -1,0 +1,10 @@
+Package: libc6
+Status: install ok unpacked
+Architecture: amd64
+Version: 2.41-12+deb13u3
+
+Package: libgcc-s1
+Status: install ok unpacked
+Architecture: amd64
+Version: 14.2.0-19
+

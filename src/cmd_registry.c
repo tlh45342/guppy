@@ -4,10 +4,12 @@
 #include <stdio.h>    // printf
 #include <ctype.h>    // tolower
 
+#include "app_printf.h"
 #include "cmds.h"
 
 /* Local -> VFS copy command. */
 int cmd_lcp(int argc, char **argv);
+int cmd_lget(int argc, char **argv);
 int cmd_chmod(int argc, char **argv);
 int cmd_date(int argc, char **argv);
 
@@ -32,9 +34,10 @@ static const Command g_cmds[] = {
     { "cd",        cmd_cd,        "cd [path]  (cd / if omitted; supports .., ., and cd -)" },
     { "chmod",     cmd_chmod,     "chmod <octal-mode> <path>  # change VFS permission bits" },
     { "cp",        cmd_cp,        "cp <src> <dst>            # copy VFS file" },
-    { "create",    cmd_create,    "create [-f raw|vdi] <img> <size> [--mbr]" },
+    { "create",    cmd_create,    "create [-f raw|vdi] <img> <size> [--mbr] [--sparse]" },
     { "date",      cmd_date,      "date                      # print host local date/time" },
     { "debug",     cmd_debug,     "debug [iso|vfs|all] [on|off|toggle]" },
+    { "diskq",     cmd_diskq,     "diskq <image>             # read-only container/partition sanity report" },
     { "do",        cmd_do,        "do <scriptfile>           # run commands from file" },
     { "echo",      cmd_echo,      "echo [-n] words... [ >|>> /path ]" },
     { "exit",      cmd_exit,      "exit                      # quit REPL" },
@@ -44,10 +47,14 @@ static const Command g_cmds[] = {
     { "hexdump",   cmd_hexdump,   "hexdump [-n bytes] [-s offset] <path>" },
     { "lcat",      cmd_lcat,      "local cat" },
     { "lcp",       cmd_lcp,       "lcp <local-src> <vfs-dst> # copy host/local file into mounted VFS" },
+    { "lget",      cmd_lget,      "lget <vfs-src> <local-dst> # copy mounted VFS file to host/local" },
     { "lls",       cmd_lls,       "local listing" },
+    { "ln",        cmd_ln,        "ln -s <target> <link>     # create VFS symbolic link" },
+    { "logfile",   cmd_logfile,   "logfile [off|-a <file>|<file>] # session/test log" },
     { "ls",        cmd_ls,        "ls [-l] [-a] [path]       # list files or mounts at '/'" },
     { "mbr",       cmd_mbr,       "mbr print <img|/dev/X>" },
     { "mkdir",     cmd_mkdir,     "mkdir <path>" },
+    { "mknod",     cmd_mknod,     "mknod <path> <c|b> <major> <minor> # create VFS device node" },
     { "mkfs.ext2", cmd_mkfs_ext2, "mkfs.ext2 <dev> --part N [--label NAME]" },
     { "mkfs.fat",  cmd_mkfs_fat,  "Format /dev/* as FAT12/16/32" },
     { "mkfs.ntfs", cmd_mkfs_ntfs, "Write minimal NTFS boot sector (probe-only)" },
@@ -56,12 +63,16 @@ static const Command g_cmds[] = {
     { "part",      cmd_part,      "part add <img|/dev/X> --index N --type 0x0C --start 1MiB --size 32MiB" },
     { "parted",    cmd_parted,    "parted -l <img|/dev/X>   # print partition table (MBR/GPT)" },
     { "partscan",  cmd_partscan,  "Scan GPT and register /dev/<base>N vblks" },
+    { "passwd",    cmd_passwd,    "passwd -R <root> <name> <password> | --hash <crypt-hash>" },
+    { "pkg",       cmd_pkg,       "pkg repo|lookup|plan|status|install   # Debian package tools" },
     { "pwd",       cmd_pwd,       "pwd                       # print current directory and backing mount" },
     { "quit",      cmd_exit,      "quit                      # quit REPL" },
+    { "readlink",  cmd_readlink,  "readlink <path>           # print VFS symbolic-link target" },
     { "rm",        cmd_rm,        "rm <path> [path...]       # remove VFS regular file(s)" },
     { "sha256",    cmd_sha256,    "sha256 <path> [path...]   # SHA-256 of VFS file(s)" },
     { "stat",      cmd_stat,      "stat file/device" },
     { "use",       cmd_use,       "use -i <image> <dev> | use # map/list devices (/dev/a, /dev/b, ...)" },
+    { "useradd",   cmd_useradd,   "useradd -R <root> [options] <name> # offline account creation" },
     { "version",   cmd_version,   "displays version information" },
     { "write",     cmd_write,     "write <dev> <local-file> [offset] # raw host file -> device/partition" },
 };
@@ -77,6 +88,6 @@ const Command *find_command(const char *name) {
 
 void print_all_commands(void) {
     for (size_t i = 0; i < cmd_count(); ++i) {
-        printf("  %-10s %s\n", g_cmds[i].name, g_cmds[i].help);
+        app_printf("  %-10s %s\n", g_cmds[i].name, g_cmds[i].help);
     }
 }

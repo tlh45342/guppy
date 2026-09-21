@@ -1,0 +1,22 @@
+logfile vhd-fixed.log
+
+; A .vhd extension selects the fixed VHD backend.
+create fixed-test.vhd 20M
+diskq fixed-test.vhd
+use -i fixed-test.vhd /dev/a
+use
+
+; Prove normal disk construction works through the fixed VHD backend.
+gpt init /dev/a
+gpt add /dev/a linuxfs rootfs 2048 40926
+partscan /dev/a
+gpt print /dev/a
+mkfs.ext2 /dev/a1 --label VHDFIXED
+mount /dev/a1 /target
+mkdir -p /target/etc
+echo vhd-fixed-persistence > /target/etc/vhd-test.txt
+cat /target/etc/vhd-test.txt
+stat /target/etc/vhd-test.txt
+diskq fixed-test.vhd
+
+logfile off

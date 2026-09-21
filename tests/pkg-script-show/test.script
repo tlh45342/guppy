@@ -1,0 +1,3 @@
+logfile pkg-script-show.log
+pkg script local:script-test.deb postinst
+logfile off

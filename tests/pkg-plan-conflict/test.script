@@ -1,0 +1,12 @@
+logfile pkg-plan-conflict.log
+create conflict.img 16M
+use -i conflict.img /dev/a
+gpt init /dev/a
+gpt add /dev/a --type linuxfs --name rootfs --start 1M --size 100%
+partscan /dev/a
+mkfs.ext2 /dev/a1
+mount /dev/a1 /target
+mkdir -p /target/repo/dists/test/main/binary-amd64
+lcp Packages /target/repo/dists/test/main/binary-amd64/Packages
+pkg repo add /target/repo
+pkg plan a /target

@@ -8,6 +8,7 @@
 #include <time.h>
 #include <ctype.h>
 
+#include "app_printf.h"
 #include "diskio.h"
 #include "vblk.h"
 #include "genhd.h"
@@ -98,7 +99,7 @@ static void print_guid(const uint8_t g[16]){
     uint32_t d1 = (uint32_t)g[3]<<24 | (uint32_t)g[2]<<16 | (uint32_t)g[1]<<8 | g[0];
     uint16_t d2 = (uint16_t)g[5]<<8 | g[4];
     uint16_t d3 = (uint16_t)g[7]<<8 | g[6];
-    printf("%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X",
+    app_printf("%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X",
            d1, d2, d3, g[8], g[9], g[10], g[11], g[12], g[13], g[14], g[15]);
 }
 static void gen_guid(uint8_t out[16]){
@@ -124,10 +125,20 @@ static const uint8_t TYPE_BIOSBOOT[16] = {
     0x48,0x61,0x68,0x21,0x49,0x64,0x6F,0x6E,0x74,0x4E,0x65,0x65,0x64,0x45,0x46,0x49
 };
 
+/* Microsoft Basic Data Partition type GUID, on-disk byte order:
+   EBD0A0A2-B9E5-4433-87C0-68B6B72699C7  =>
+   A2 A0 D0 EB E5 B9 33 44 87 C0 68 B6 B7 26 99 C7
+*/
+static const uint8_t TYPE_MS_BASIC[16] = {
+    0xA2,0xA0,0xD0,0xEB,0xE5,0xB9,0x33,0x44,0x87,0xC0,0x68,0xB6,0xB7,0x26,0x99,0xC7
+};
+
 static const uint8_t *type_guid_for(const char *type){
     if (!type) return NULL;
     if (strcasecmp(type, "linuxfs")==0 || strcasecmp(type,"linux")==0) return TYPE_LINUXFS;
     if (strcasecmp(type, "biosboot")==0 || strcasecmp(type,"bios")==0) return TYPE_BIOSBOOT;
+    if (strcasecmp(type, "msbasic")==0 || strcasecmp(type,"basic")==0 ||
+        strcasecmp(type, "basicdata")==0 || strcasecmp(type,"ms-basic")==0) return TYPE_MS_BASIC;
     return NULL;
 }
 
@@ -310,24 +321,24 @@ static int gpt_cmd_print(const char *target) {
 
     gpt_hdr_t h;
     if (!gpt_read_header(key, 1, total_lbas, &h)) {
-        printf("No GPT found on %s\n", target);
+        app_printf("No GPT found on %s\n", target);
         return 0;
     }
 
-    printf("Disk: %s  Sector: 512\n", target);
-    printf("Disk GUID: "); print_guid(h.disk_guid); printf("\n");
-    printf("Primary GPT: LBA %" PRIu64 " | Array: LBA %" PRIu64 "  (entries=%u, size=%u)\n",
+    app_printf("Disk: %s  Sector: 512\n", target);
+    app_printf("Disk GUID: "); print_guid(h.disk_guid); app_printf("\n");
+    app_printf("Primary GPT: LBA %" PRIu64 " | Array: LBA %" PRIu64 "  (entries=%u, size=%u)\n",
            h.current_lba, h.entries_lba, h.num_entries, h.entry_size);
-    printf("Backup  GPT: LBA %" PRIu64 "\n\n", h.backup_lba);
+    app_printf("Backup  GPT: LBA %" PRIu64 "\n\n", h.backup_lba);
 
     gpt_ent_t *ents = gpt_read_entries(key, &h);
     if (!ents) {
-        printf("(Could not read entries or CRC mismatch)\n");
+        app_printf("(Could not read entries or CRC mismatch)\n");
         return 0;
     }
 
-    printf("Idx  Start LBA     End LBA       Size        Type        Name\n");
-    printf("---  ------------  ------------  ----------  ----------  ----------------\n");
+    app_printf("Idx  Start LBA     End LBA       Size        Type        Name\n");
+    app_printf("---  ------------  ------------  ----------  ----------  ----------------\n");
     unsigned idx=1;
     for (uint32_t i=0; i<h.num_entries; ++i) {
         gpt_ent_t *e = (gpt_ent_t*)((uint8_t*)ents + (size_t)i*h.entry_size);
@@ -344,8 +355,9 @@ static int gpt_cmd_print(const char *target) {
         const char *type = "unknown";
         if (memcmp(e->type_guid, TYPE_LINUXFS, 16)==0) type="linuxfs";
         else if (memcmp(e->type_guid, TYPE_BIOSBOOT, 16)==0) type="biosboot";
+        else if (memcmp(e->type_guid, TYPE_MS_BASIC, 16)==0) type="msbasic";
 
-        printf("%3u  %12" PRIu64 "  %12" PRIu64 "  %10.1f  %-10s  %-16s\n",
+        app_printf("%3u  %12" PRIu64 "  %12" PRIu64 "  %10.1f  %-10s  %-16s\n",
                idx++, first, last, mb, type, name);
     }
     free(ents);
@@ -421,7 +433,7 @@ static int gpt_cmd_init(const char *target) {
     }
     free(ents);
 
-    printf("Initialized GPT on %s (primary LBA=%" PRIu64 ", backup LBA=%" PRIu64 ")\n",
+    app_printf("Initialized GPT on %s (primary LBA=%" PRIu64 ", backup LBA=%" PRIu64 ")\n",
            target, (uint64_t)1, backup_hdr_lba);
 
     (void)block_rescan(target);
@@ -468,7 +480,26 @@ static int gpt_add_by_range(const char *target, const char *type, const char *na
     if (last_lba  > hp.last_usable_lba)  last_lba  = hp.last_usable_lba;
     if (last_lba < first_lba) { fprintf(stderr, "gpt add: range outside usable area\n"); free(ents); return 0; }
 
-    /* TODO: optional overlap check with existing entries */
+    /* Reject partitions whose inclusive LBA range overlaps an existing entry.
+       Adjacent ranges are valid: [a,b] and [b+1,c] do not overlap. */
+    for (uint32_t i=0; i<hp.num_entries; ++i) {
+        gpt_ent_t *cur = (gpt_ent_t*)((uint8_t*)ents + (size_t)i*hp.entry_size);
+        bool empty = true;
+        for (int k=0; k<16; ++k) {
+            if (cur->type_guid[k]) { empty = false; break; }
+        }
+        if (empty) continue;
+
+        if (first_lba <= cur->last_lba && last_lba >= cur->first_lba) {
+            fprintf(stderr,
+                    "gpt add: range [%" PRIu64 ", %" PRIu64
+                    "] overlaps existing partition #%u [%" PRIu64 ", %" PRIu64 "]\n",
+                    first_lba, last_lba, (unsigned)(i+1),
+                    cur->first_lba, cur->last_lba);
+            free(ents);
+            return 0;
+        }
+    }
 
     /* find free slot */
     uint32_t idx = UINT32_MAX;
@@ -498,7 +529,7 @@ static int gpt_add_by_range(const char *target, const char *type, const char *na
 
     free(ents);
 
-    printf("Added %s '%s' at [%" PRIu64 ", %" PRIu64 "] on %s (entry #%u)\n",
+    app_printf("Added %s '%s' at [%" PRIu64 ", %" PRIu64 "] on %s (entry #%u)\n",
            type ? type : "partition", name ? name : "", first_lba, last_lba, target, (unsigned)(idx+1));
 
     (void)block_rescan(target);
@@ -620,14 +651,14 @@ static int gpt_cmd_add_legacy(const char *dev, const char *type, const char *nam
 
 /* ------------------------------- usage/dispatcher -------------------------- */
 static void usage(void){
-    printf(
+    app_printf(
       "gpt commands:\n"
       "  gpt print <dev>                          # show GPT header and entries\n"
       "  gpt init  <dev>                          # create protective MBR + GPT (empty)\n"
       "  gpt add <dev> <type> <name> <first> <last>\n"
       "  gpt add <dev> --type <t> --name <n> --start <spec> [--size <spec> | --end <spec>]\n"
       "    size/start spec examples: 2048s | 1M | 1MiB | 64MB | 100%%\n"
-      "Supported types: linuxfs biosboot\n"
+      "Supported types: linuxfs biosboot msbasic\n"
     );
 }
 

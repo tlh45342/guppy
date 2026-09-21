@@ -4,6 +4,9 @@
 #include <limits.h>
 #include "fs_format.h"
 #include "devmap.h"
+#include "diskio.h"
+#include "vblk.h"
+#include "app_printf.h"
 
 static int is_pow2_u16(unsigned v){ return v && ((v & (v-1)) == 0); }
 static int is_pow2_u8 (unsigned v){ return v && v <= 128 && ((v & (v-1)) == 0); }
@@ -15,22 +18,30 @@ int cmd_mkfs_ntfs(int argc, char **argv){
         return 2;
     }
     const char *dev = argv[1];
-    if (strncmp(dev, "/dev/", 5) != 0){
-        printf("mkfs.ntfs: first argument must be a mapped device like /dev/a\n");
-        return 2;
-    }
 
-    const char *mapped = devmap_resolve(dev);
-    if (!mapped){
-        printf("mkfs.ntfs: device not mapped: %s\n", dev);
-        return 1;
-    }
     char path[512] = {0};
-    strncpy(path, mapped, sizeof path - 1);
+    uint64_t base_off = 0, bounded_bytes = 0;
+    const char *mapped = NULL;
+
+    /* Resolve partition devices to their backing image plus a bounded logical
+       byte range.  This fixes the old behavior where /dev/a1 was treated as
+       the beginning/full size of the host image.  For fixed VHD the guest
+       payload is a direct byte-for-byte prefix of the host file. */
+    if (vblk_resolve_to_base(dev, path, sizeof path, &base_off, &bounded_bytes)) {
+        mapped = path;
+    } else {
+        mapped = diskio_resolve(dev);
+        if (!mapped) {
+            app_printf("mkfs.ntfs: device not mapped: %s\n", dev);
+            return 1;
+        }
+        snprintf(path, sizeof path, "%s", mapped);
+    }
 
     mkfs_ntfs_opts_t opt = {
         .image_path     = path,
-        .lba_offset     = 0,
+        .lba_offset     = (uint32_t)(base_off / 512u),
+        .size_bytes     = bounded_bytes,
         .bytes_per_sec  = 512,
         .sec_per_clus   = 8,   // 4KiB clusters on 512B sectors
         .mft_start_clus = 4,
@@ -40,6 +51,10 @@ int cmd_mkfs_ntfs(int argc, char **argv){
 
     for (int i=2; i<argc; i++){
         if (!strcmp(argv[i], "-o") && i+1 < argc) {
+            if (base_off != 0) {
+                app_printf("mkfs.ntfs: -o is not valid for a partition device\n");
+                return 2;
+            }
             opt.lba_offset = (uint32_t)strtoul(argv[++i], NULL, 0);
         } else if (!strcmp(argv[i], "-S") && i+1 < argc) {
             unsigned v = (unsigned)strtoul(argv[++i], NULL, 0);

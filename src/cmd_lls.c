@@ -21,6 +21,7 @@
 #endif
 
 #include "debug.h"
+#include "app_printf.h"
 #ifndef DBG
 #define DBG(...) do{}while(0)
 #endif
@@ -65,7 +66,7 @@ static int tm_local(time_t tt, struct tm *out)
 // -----------------------------------------------------------------------------
 static void usage(void)
 {
-    printf("usage: lls [-l] [-a] [path]\n");
+    app_printf("usage: lls [-l] [-a] [path]\n");
 }
 
 static void mode_to_str(mode_t m, char out[11])
@@ -96,7 +97,7 @@ static void print_long(const char *dir, const char *name)
 
     struct stat st;
     if (lstat(path, &st) != 0) {
-        printf("?????????? ? %12s %s (stat: %s)\n", "?", name, strerror(errno));
+        app_printf("?????????? ? %12s %s (stat: %s)\n", "?", name, strerror(errno));
         return;
     }
 
@@ -126,15 +127,15 @@ static void print_long(const char *dir, const char *name)
 #endif
 #endif
 
-    printf("%s %3lu %10" PRIuMAX " %s %s",
-           perm,
-           (unsigned long)st.st_nlink,
-           (uintmax_t)st.st_size,
-           tbuf,
-           name);
+    app_printf("%s %3lu %10" PRIuMAX " %s %s",
+               perm,
+               (unsigned long)st.st_nlink,
+               (uintmax_t)st.st_size,
+               tbuf,
+               name);
 
-    if (ln > 0) printf(" -> %s", linkto);
-    printf("\n");
+    if (ln > 0) app_printf(" -> %s", linkto);
+    app_printf("\n");
 }
 
 int cmd_lls(int argc, char **argv)
@@ -168,7 +169,7 @@ int cmd_lls(int argc, char **argv)
         if (!opt_all && name[0] == '.') continue;
 
         if (opt_long) print_long(path, name);
-        else printf("%s\n", name);
+        else app_printf("%s\n", name);
     }
 
     closedir(d);

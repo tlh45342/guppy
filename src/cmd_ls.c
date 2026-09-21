@@ -9,13 +9,14 @@
 #include "vfs.h"
 #include "vfs_stat.h"
 #include "debug.h"
+#include "app_printf.h"
 
 #ifndef PATH_MAX
 #define PATH_MAX 1024
 #endif
 
 static void print_usage(void) {
-    puts("usage: ls [-l] [-a] [-h] [path]");
+    app_printf("usage: ls [-l] [-a] [-h] [path]\n");
 }
 
 static void fmt_size(uint64_t size, int human, char *out, size_t cap) {
@@ -40,7 +41,7 @@ static void fmt_size(uint64_t size, int human, char *out, size_t cap) {
 
 // Turn st_mode into "drwxr-xr-x" style.
 static void fmt_mode(uint32_t mode, char out[11]) {
-    out[0] = VFS_S_ISDIR(mode) ? 'd' : '-';
+    out[0] = VFS_S_ISDIR(mode) ? 'd' : VFS_S_ISCHR(mode) ? 'c' : VFS_S_ISBLK(mode) ? 'b' : VFS_S_ISLNK(mode) ? 'l' : '-';
     out[1] = (mode & 0400) ? 'r' : '-';
     out[2] = (mode & 0200) ? 'w' : '-';
     out[3] = (mode & 0100) ? 'x' : '-';
@@ -100,7 +101,7 @@ int cmd_ls(int argc, char **argv)
             }
 
             if (!longfmt) {
-                puts(name);
+                app_printf("%s\n", name);
             } else {
                 char full[PATH_MAX];
                 if (strcmp(path, ".") == 0) snprintf(full, sizeof full, "%s", name);
@@ -123,14 +124,14 @@ int cmd_ls(int argc, char **argv)
                     if (tm) strftime(when, sizeof when, "%Y-%m-%d %H:%M", tm);
                     else strcpy(when, "-");
 
-                    printf("%s %2u %8s %8s %10s %s %s\n",
+                    app_printf("%s %2u %8s %8s %10s %s %s\n",
                            modebuf, 1u, owner, group,
                            sizebuf, when, name);
                 } else {
                     char t = (de->d_type == VFS_DT_DIR) ? 'd'
                            : (de->d_type == VFS_DT_REG) ? '-'
                            : '?';
-                    printf("%c%9s %2u %8s %8s %10s %s\n",
+                    app_printf("%c%9s %2u %8s %8s %10s %s\n",
                            t, "---------", 1u, "-", "-", "-", name);
                 }
             }

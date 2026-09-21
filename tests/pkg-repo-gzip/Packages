@@ -1,0 +1,8 @@
+Package: gzip-fixture
+Version: 1.2.3-1
+Architecture: amd64
+Filename: pool/main/g/gzip-fixture/gzip-fixture_1.2.3-1_amd64.deb
+Size: 1234
+SHA256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+Depends: libc6 (>= 2.41)
+

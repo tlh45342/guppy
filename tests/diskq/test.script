@@ -1,0 +1,15 @@
+logfile diskq.log
+create fixed-query.vdi 20M
+diskq fixed-query.vdi
+use -i fixed-query.vdi /dev/a
+gpt init /dev/a
+gpt add /dev/a linuxfs rootfs 2048 40926
+diskq fixed-query.vdi
+create --sparse sparse-query.vdi 64M
+use -i sparse-query.vdi /dev/b
+gpt init /dev/b
+gpt add /dev/b linuxfs rootfs 2048 131038
+partscan /dev/b
+mkfs.ext2 /dev/b1 --label DISKQ
+diskq sparse-query.vdi
+logfile off

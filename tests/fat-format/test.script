@@ -1,0 +1,20 @@
+logfile fat-format.log
+create fat-format.img 32M
+use -i fat-format.img /dev/a
+gpt init /dev/a
+gpt add /dev/a linuxfs fatpart 2048 32767
+partscan /dev/a
+mkfs.fat /dev/a1 -F 16 -L GUPPYFAT
+gpt print /dev/a
+partscan --verify /dev/a
+use
+create vfat-format.img 32M
+use -i vfat-format.img /dev/b
+gpt init /dev/b
+gpt add /dev/b linuxfs vfatpart 2048 32767
+partscan /dev/b
+mkfs_vfat /dev/b1 -F 16 -L GUPPYVFAT
+gpt print /dev/b
+partscan --verify /dev/b
+use
+logfile off

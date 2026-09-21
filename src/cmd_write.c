@@ -6,6 +6,7 @@
 
 #include "vblk.h"
 #include "helper.h"
+#include "app_printf.h"
 
 int cmd_write(int argc, char **argv)
 {
@@ -61,6 +62,6 @@ int cmd_write(int argc, char **argv)
     }
     fclose(f);
     if (!vblk_flush(vb)) { fprintf(stderr, "write: flush failed on %s\n", devname); return 1; }
-    printf("Wrote %" PRIu64 " bytes from %s to %s at +%" PRIu64 "\n", file_size, hostfile, devname, rel_off);
+    app_printf("Wrote %" PRIu64 " bytes from %s to %s at +%" PRIu64 "\n", file_size, hostfile, devname, rel_off);
     return 0;
 }

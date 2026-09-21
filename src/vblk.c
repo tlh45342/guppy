@@ -18,6 +18,7 @@ int g_vblk_count = 0;
 
 static const vblk_t *find_by_name(const char *name, int *out_index) {
     for (int i = 0; i < g_vblk_count; ++i) {
+        if (g_vblk[i].name[0] == '\0') continue;
         if (strcmp(g_vblk[i].name, name) == 0) {
             if (out_index) *out_index = i;
             return &g_vblk[i];
@@ -34,9 +35,35 @@ int vblk_register(const vblk_t *entry) {
     int idx = -1;
     const vblk_t *existing = find_by_name(entry->name, &idx);
     if (existing) { g_vblk[idx] = *entry; return idx; }
+    for (int i = 0; i < g_vblk_count; ++i) {
+        if (g_vblk[i].name[0] == '\0') {
+            g_vblk[i] = *entry;
+            return i;
+        }
+    }
     if (g_vblk_count >= VBLK_MAX) return -1;
     g_vblk[g_vblk_count] = *entry;
     return g_vblk_count++;
+}
+
+int vblk_remove_children(const char *parent_name) {
+    if (!parent_name || !*parent_name) return 0;
+    size_t plen = strlen(parent_name);
+    int removed = 0;
+    for (int i = 0; i < g_vblk_count; ++i) {
+        const char *name = g_vblk[i].name;
+        if (!name[0] || strncmp(name, parent_name, plen) != 0) continue;
+        const char *suffix = name + plen;
+        if (!*suffix) continue;
+        bool all_digits = true;
+        for (const char *q = suffix; *q; ++q) {
+            if (*q < '0' || *q > '9') { all_digits = false; break; }
+        }
+        if (!all_digits) continue;
+        memset(&g_vblk[i], 0, sizeof g_vblk[i]);
+        ++removed;
+    }
+    return removed;
 }
 
 void vblk_clear(void) { memset(g_vblk, 0, sizeof g_vblk); g_vblk_count = 0; }

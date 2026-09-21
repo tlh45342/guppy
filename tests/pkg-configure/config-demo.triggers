@@ -1,0 +1,2 @@
+# synthetic shared-library style activation
+activate-noawait ldconfig

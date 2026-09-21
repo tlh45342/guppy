@@ -1,0 +1,40 @@
+logfile pkg-libc6-configure.log
+create pkg-libc6-configure.img 16M
+use -i pkg-libc6-configure.img /dev/a
+gpt init /dev/a
+gpt add /dev/a --type linuxfs --name rootfs --start 1M --size 100%
+partscan /dev/a
+mkfs.ext2 /dev/a1
+mount /dev/a1 /target
+
+echo === unpack libc6 with controlled pre-unpack ===
+pkg install local:libc6_2.41-12+deb13u3_amd64.deb /target
+pkg status /target libc6
+
+echo === unpack libc-bin and register ldconfig interest ===
+pkg install local:libc-bin_2.41-12+deb13u3_amd64.deb /target
+pkg status /target libc-bin
+pkg triggers /target
+
+echo === configure libc6 without shell execution ===
+pkg configure libc6 /target
+pkg status /target libc6
+
+echo === Round 13 trigger state before libc-bin configuration ===
+pkg triggers /target
+
+echo === configure libc-bin using native offline ldconfig ===
+pkg configure libc-bin /target
+pkg status /target libc-bin
+cat /target/etc/nsswitch.conf
+stat /target/etc/ld.so.cache
+hexdump -s 0 -n 64 /target/etc/ld.so.cache
+pkg ldconfig-cache /target
+
+echo === process supported pending triggers ===
+pkg trigger-process /target
+
+echo === trigger state after processing; libc-upgrade intentionally remains ===
+pkg triggers /target
+cat /target/var/lib/dpkg/triggers/Unincorp
+logfile off

@@ -1,0 +1,21 @@
+logfile vhd-ntfs-basic.log
+
+; Build a 1 GiB fixed VHD for external interoperability testing.
+create fixed-ntfs.vhd 1G
+diskq fixed-ntfs.vhd
+use -i fixed-ntfs.vhd /dev/a
+
+; GPT + Microsoft Basic Data partition.  Leave normal 1 MiB alignment.
+gpt init /dev/a
+gpt add /dev/a --type msbasic --name data --start 1MiB --size 100%
+partscan /dev/a
+gpt print /dev/a
+
+; Guppy's NTFS formatter is intentionally still a minimal/probe formatter.
+; This test proves correct partition-relative placement and geometry inside VHD.
+mkfs.ntfs /dev/a1 -v
+
+; Re-read container + GPT after NTFS metadata writes.
+gpt print /dev/a
+diskq fixed-ntfs.vhd
+logfile off

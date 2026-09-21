@@ -1,0 +1,28 @@
+# Guppy build products
+/build/
+/bin/
+/lib/vdisk/build/
+/lib/vdisk/*.a
+
+# Test output and generated disk/media artifacts
+/tests/logs/
+*.log
+*.img
+*.raw
+*.vdi
+*.vhd
+*.iso
+
+# Debian packages are never repository fixtures.  Synthetic package inputs
+# belong on Guppy reference media; real Debian packages remain external.
+*.deb
+
+# Common local/editor debris
+*.tmp
+*.bak
+*~
+__pycache__/
+*.pyc
+
+# Guppy-owned distributable synthetic regression medium.
+!/tests/media/guppy-reference.iso

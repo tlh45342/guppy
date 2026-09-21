@@ -1,0 +1,3 @@
+logfile pkg-scripts.log
+pkg scripts local:script-test.deb
+logfile off

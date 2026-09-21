@@ -1,0 +1,9 @@
+logfile -a vhd-ntfs-basic.log
+
+; Fresh process: reopen and prove VHD/GPT geometry survived the NTFS writes.
+use -i fixed-ntfs.vhd /dev/a
+partscan /dev/a
+gpt print /dev/a
+diskq fixed-ntfs.vhd
+
+logfile off

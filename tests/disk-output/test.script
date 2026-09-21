@@ -1,0 +1,11 @@
+logfile disk-output.log
+create disk-output.img 16M
+use -i disk-output.img /dev/a
+gpt init /dev/a
+gpt add /dev/a --type linuxfs --name rootfs --start 1M --size 12M
+gpt print /dev/a
+partscan /dev/a
+use
+parted -l disk-output.img
+help
+logfile off

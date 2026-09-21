@@ -13,6 +13,7 @@
 #include "mbr.h"
 #include "cmds.h"
 #include "version.h"
+#include "logfile.h"
 
 // ---------- small helpers ----------
 
@@ -47,6 +48,7 @@ static int handle_do(int argc, char **argv) {
         rstrip(line);
         if (is_blank_or_comment(line)) continue;
         if (verbose) printf(">> %s\n", line);
+        guppy_log_command(line);
 
         int this_rc = run_command_line(line);
         if (this_rc != 0) {
@@ -85,6 +87,15 @@ static int repl_loop(void) {
                 fprintf(stderr, "[repl] stdin error cleared; continuing.\n");
                 continue;
             }
+        }
+
+        // Record interactive commands when a logfile is active.
+        {
+            char logline[1024];
+            strncpy(logline, line, sizeof logline - 1);
+            logline[sizeof logline - 1] = '\0';
+            rstrip(logline);
+            guppy_log_command(logline);
         }
 
         // Run the command. We IGNORE rc unless 'exit' set the flag below.

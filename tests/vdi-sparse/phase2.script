@@ -1,0 +1,10 @@
+logfile -a vdi-sparse.log
+
+; Fresh process: dynamic block map must reopen correctly.
+use -i sparse-test.vdi /dev/a
+partscan /dev/a
+mount /dev/a1 /target
+cat /target/etc/vdi-test.txt
+stat /target/etc/vdi-test.txt
+
+logfile off

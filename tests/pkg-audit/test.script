@@ -1,0 +1,17 @@
+logfile pkg-audit.log
+create pkg-audit.img 16M
+use -i pkg-audit.img /dev/a
+gpt init /dev/a
+gpt add /dev/a --type linuxfs --name rootfs --start 1M --size 100%
+partscan /dev/a
+mkfs.ext2 /dev/a1
+mount /dev/a1 /target
+
+; Build the repository in the layout pkg repo add expects.
+mkdir -p /target/repo/dists/test/main/binary-amd64
+lcp Packages /target/repo/dists/test/main/binary-amd64/Packages
+lcp audit-lib_1.0-1_amd64.deb /target/repo/audit-lib_1.0-1_amd64.deb
+lcp audit-root_1.0-1_amd64.deb /target/repo/audit-root_1.0-1_amd64.deb
+
+pkg repo add /target/repo
+pkg audit audit-root /target

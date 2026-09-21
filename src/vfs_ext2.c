@@ -65,11 +65,16 @@ static uint32_t rd32le(const uint8_t *p) {
 typedef struct ext2_disk_layout {
     uint32_t block_size;
     uint32_t inode_size;
-    uint32_t inode_table;
+    uint32_t inodes_count;
+    uint32_t inodes_per_group;
+    uint32_t group_count;
+    uint64_t group_desc_offset;
 } ext2_disk_layout_t;
 
 typedef struct ext2_disk_inode {
     uint16_t mode;
+    uint16_t uid;
+    uint16_t gid;
     uint32_t size;
     uint32_t atime, ctime, mtime;
     uint16_t links;
@@ -79,42 +84,69 @@ typedef struct ext2_disk_inode {
 
 static bool ext2_read_layout(vblk_t *dev, ext2_disk_layout_t *lo) {
     uint8_t sb[1024];
-    uint8_t gd[32];
     if (!dev || !lo) return false;
     if (!vblk_read_bytes(dev, 1024, sizeof sb, sb)) return false;
     if (rd16le(sb + 56) != 0xEF53) return false;
 
     uint32_t log_bs = rd32le(sb + 24);
     if (log_bs > 2) return false; /* 1K, 2K, 4K only */
+    memset(lo, 0, sizeof *lo);
     lo->block_size = 1024u << log_bs;
     lo->inode_size = rd16le(sb + 88);
     if (lo->inode_size == 0) lo->inode_size = 128;
     if (lo->inode_size < 128 || lo->inode_size > lo->block_size) return false;
 
+    lo->inodes_count = rd32le(sb + 0);
+    lo->inodes_per_group = rd32le(sb + 40);
+    if (lo->inodes_count == 0 || lo->inodes_per_group == 0) return false;
+    lo->group_count = (lo->inodes_count + lo->inodes_per_group - 1u)
+                    / lo->inodes_per_group;
+
     uint32_t first_data_block = rd32le(sb + 20);
-    uint64_t gd_off = (uint64_t)(first_data_block + 1u) * lo->block_size;
+    lo->group_desc_offset = (uint64_t)(first_data_block + 1u) * lo->block_size;
+    return lo->group_count != 0;
+}
+
+/* Resolve an EXT2 inode number through its block-group descriptor.  The old
+ * VFS-side reader cached only group 0's inode table, which made inode N+1
+ * unreadable as soon as allocation crossed s_inodes_per_group. */
+static bool ext2_inode_disk_offset(vblk_t *dev, const ext2_disk_layout_t *lo,
+                                   uint32_t ino, uint64_t *off_out) {
+    uint8_t gd[32];
+    if (!dev || !lo || !off_out || ino == 0 || ino > lo->inodes_count) return false;
+
+    uint32_t group = (ino - 1u) / lo->inodes_per_group;
+    uint32_t local = (ino - 1u) % lo->inodes_per_group;
+    if (group >= lo->group_count) return false;
+
+    uint64_t gd_off = lo->group_desc_offset + (uint64_t)group * sizeof gd;
     if (!vblk_read_bytes(dev, gd_off, sizeof gd, gd)) return false;
-    lo->inode_table = rd32le(gd + 8);
-    return lo->inode_table != 0;
+    uint32_t inode_table = rd32le(gd + 8);
+    if (inode_table == 0) return false;
+
+    *off_out = (uint64_t)inode_table * lo->block_size
+             + (uint64_t)local * lo->inode_size;
+    return true;
 }
 
 static bool ext2_read_inode_disk(vblk_t *dev, uint32_t ino,
                                  ext2_disk_inode_t *out) {
     ext2_disk_layout_t lo;
     uint8_t raw[256];
+    uint64_t off = 0;
     if (!out || ino == 0 || !ext2_read_layout(dev, &lo)) return false;
     if (lo.inode_size > sizeof raw) return false;
-
-    uint64_t off = (uint64_t)lo.inode_table * lo.block_size
-                 + (uint64_t)(ino - 1u) * lo.inode_size;
+    if (!ext2_inode_disk_offset(dev, &lo, ino, &off)) return false;
     if (!vblk_read_bytes(dev, off, lo.inode_size, raw)) return false;
 
     memset(out, 0, sizeof *out);
     out->mode      = rd16le(raw + 0);
+    out->uid       = rd16le(raw + 2);
     out->size      = rd32le(raw + 4);
     out->atime     = rd32le(raw + 8);
     out->ctime     = rd32le(raw + 12);
     out->mtime     = rd32le(raw + 16);
+    out->gid       = rd16le(raw + 24);
     out->links     = rd16le(raw + 26);
     out->blocks512 = rd32le(raw + 28);
     for (int i = 0; i < 15; ++i) out->block[i] = rd32le(raw + 40 + i * 4);
@@ -125,6 +157,8 @@ static uint8_t ext2_ft_to_vfs(uint8_t t) {
     switch (t) {
         case 1: return VFS_DT_REG;
         case 2: return VFS_DT_DIR;
+        case 3: return VFS_DT_CHR;
+        case 4: return VFS_DT_BLK;
         case 7: return VFS_DT_LNK;
         default: return VFS_DT_UNKNOWN;
     }
@@ -219,9 +253,29 @@ static bool ext2_write_mode_disk(vblk_t *dev, uint32_t ino, uint16_t mode)
     raw[0] = (uint8_t)(mode & 0xff);
     raw[1] = (uint8_t)((mode >> 8) & 0xff);
 
-    uint64_t off = (uint64_t)lo.inode_table * lo.block_size
-                 + (uint64_t)(ino - 1u) * lo.inode_size;
+    uint64_t off = 0;
+    if (!ext2_inode_disk_offset(dev, &lo, ino, &off)) return false;
     return vblk_write_bytes(dev, off, sizeof raw, raw);
+}
+
+static bool ext2_write_owner_disk(vblk_t *dev, uint32_t ino,
+                                  uint16_t uid, uint16_t gid)
+{
+    ext2_disk_layout_t lo;
+    uint8_t raw[2];
+
+    if (!dev || ino == 0 || !ext2_read_layout(dev, &lo)) return false;
+
+    uint64_t off = 0;
+    if (!ext2_inode_disk_offset(dev, &lo, ino, &off)) return false;
+
+    raw[0] = (uint8_t)(uid & 0xff);
+    raw[1] = (uint8_t)((uid >> 8) & 0xff);
+    if (!vblk_write_bytes(dev, off + 2u, sizeof raw, raw)) return false;
+
+    raw[0] = (uint8_t)(gid & 0xff);
+    raw[1] = (uint8_t)((gid >> 8) & 0xff);
+    return vblk_write_bytes(dev, off + 24u, sizeof raw, raw);
 }
 
 /* -------- mount state -------- */
@@ -311,7 +365,14 @@ static int f_release(struct file *f) {
     if (fp) {
         if (fp->writable && fp->dirty &&
             fp->node && fp->node->rel && fp->node->fs && fp->node->fs->dev) {
-            int wrc = ext2_create_and_write(fp->node->fs->dev,
+            /* Preserve an existing inode when rewriting/appending.  Newly
+             * created VFS inodes have i_ino == 0 until the first flush. */
+            int wrc = (f->f_inode && f->f_inode->i_ino != 0)
+                    ? ext2_write_existing_at(fp->node->fs->dev,
+                                             fp->node->rel,
+                                             fp->buf ? (const void*)fp->buf : (const void*)"",
+                                             fp->len)
+                    : ext2_create_and_write(fp->node->fs->dev,
                                             fp->node->rel,
                                             fp->buf ? (const void*)fp->buf : (const void*)"",
                                             fp->len);
@@ -328,18 +389,31 @@ static int f_release(struct file *f) {
 }
 static ssize_t f_write(struct file *f, const void *buf, size_t n, uint64_t *pos) {
     ext2_file_priv_t *fp = (ext2_file_priv_t*)f->private_data;
-    if (!fp || !fp->writable || !buf) return -1;
-    if (fp->len + n > fp->cap) {
-        size_t nc = fp->cap ? fp->cap * 2 : 4096;
-        while (nc < fp->len + n) nc *= 2;
+    if (!fp || !fp->writable || !buf || !pos) return -1;
+
+    /* O_APPEND is a file-status property: every write starts at the current
+     * EOF, not merely the first write after open. */
+    uint64_t write_pos = (f->f_flags & VFS_O_APPEND) ? (uint64_t)fp->len : *pos;
+    if (write_pos > SIZE_MAX || n > SIZE_MAX - (size_t)write_pos) return -1;
+    size_t end = (size_t)write_pos + n;
+
+    if (end > fp->cap) {
+        size_t nc = fp->cap ? fp->cap : 4096;
+        while (nc < end) {
+            if (nc > SIZE_MAX / 2u) { nc = end; break; }
+            nc *= 2u;
+        }
         uint8_t *nb = (uint8_t*)realloc(fp->buf, nc);
         if (!nb) return -1;
         fp->buf = nb; fp->cap = nc;
     }
-    memcpy(fp->buf + fp->len, buf, n);
-    fp->len += n;
+    if ((size_t)write_pos > fp->len) {
+        memset(fp->buf + fp->len, 0, (size_t)write_pos - fp->len);
+    }
+    memcpy(fp->buf + (size_t)write_pos, buf, n);
+    if (end > fp->len) fp->len = end;
     fp->dirty = true;
-    if (pos) *pos += n;
+    *pos = write_pos + n;
     return (ssize_t)n;
 }
 
@@ -528,6 +602,24 @@ static int i_getattr(struct inode *ino, struct g_stat *st) {
     st->st_size = ino->i_size;
     st->st_blksize = ino->i_sb ? ino->i_sb->block_size : 1024;
     st->st_blocks = (ino->i_size + 511u) / 512u;
+    if (VFS_S_ISCHR(ino->i_mode) || VFS_S_ISBLK(ino->i_mode)) {
+        ext2_inode_priv_t *ip = (ext2_inode_priv_t*)ino->i_private;
+        ext2_disk_inode_t di;
+        if (ip && ip->fs && ip->fs->dev && ino->i_ino &&
+            ext2_read_inode_disk(ip->fs->dev, (uint32_t)ino->i_ino, &di)) {
+            uint32_t raw = di.block[0] ? di.block[0] : di.block[1];
+            uint32_t major, minor;
+            if (di.block[0]) {
+                major = (raw >> 8) & 0xffu;
+                minor = raw & 0xffu;
+            } else {
+                major = (raw >> 8) & 0xfffu;
+                minor = (raw & 0xffu) | ((raw >> 12) & 0xfff00u);
+            }
+            st->st_rdev = ((uint64_t)major << 32) | minor;
+            st->st_blocks = di.blocks512;
+        }
+    }
     st->st_atime = (int64_t)ino->i_atime;
     st->st_mtime = (int64_t)ino->i_mtime;
     st->st_ctime = (int64_t)ino->i_ctime;
@@ -551,6 +643,17 @@ static int i_mkdir(struct inode *dir, const char *name, uint32_t mode) {
     if (ext2_mkdir_at(dp->fs->dev, full, ext2_mode) != 0) return -1;
     if (!ext2_dirs_add(dp->fs, full)) return -1;
     return 0;
+}
+
+static int i_mknod(struct inode *dir, const char *name, uint32_t mode,
+                   uint32_t major, uint32_t minor) {
+    ext2_inode_priv_t *dp;
+    char full[VFS_PATH_MAX];
+    if (!dir || !name || !*name) return -1;
+    dp = (ext2_inode_priv_t*)dir->i_private;
+    if (!dp || !dp->fs || !dp->fs->dev || !dp->is_dir) return -1;
+    join_relpath(dp->rel ? dp->rel : "", name, full, sizeof full);
+    return ext2_mknod_at(dp->fs->dev, full, (uint16_t)mode, major, minor);
 }
 
 #if VFS_HAVE_CREATE_OP
@@ -613,6 +716,8 @@ static int i_lookup(struct inode *dir, const char *name, struct inode **out) {
 
             ino->i_ino = ino_num;
             ino->i_mode = di.mode;
+            ino->i_uid = di.uid;
+            ino->i_gid = di.gid;
             ino->i_size = di.size;
             ino->i_atime = di.atime;
             ino->i_ctime = di.ctime;
@@ -648,20 +753,38 @@ static int i_lookup(struct inode *dir, const char *name, struct inode **out) {
     return 0; /* not found */
 }
 
-static int i_readlink(struct inode *ino, char *buf, size_t bufsz) { (void)ino;(void)buf;(void)bufsz; return -1; }
-static int i_setattr(struct inode *ino, const void *attr) {
-    const uint32_t *modep = (const uint32_t*)attr;
-    uint32_t new_mode;
+static int i_readlink(struct inode *ino, char *buf, size_t bufsz) {
+    ext2_inode_priv_t *ip;
+    if (!ino || !buf || bufsz == 0) return -1;
+    ip = (ext2_inode_priv_t*)ino->i_private;
+    if (!ip || !ip->fs || !ip->fs->dev || !ip->rel) return -1;
+    return ext2_readlink_at(ip->fs->dev, ip->rel, buf, bufsz);
+}
+static int i_setattr(struct inode *ino, const void *attrp) {
+    const vfs_iattr_t *attr = (const vfs_iattr_t*)attrp;
     ext2_inode_priv_t *ip;
 
-    if (!ino || !modep || ino->i_ino == 0) return -1;
+    if (!ino || !attr || ino->i_ino == 0) return -1;
     ip = (ext2_inode_priv_t*)ino->i_private;
     if (!ip || !ip->fs || !ip->fs->dev) return -1;
 
-    new_mode = (ino->i_mode & VFS_S_IFMT) | (*modep & 07777u);
-    if (!ext2_write_mode_disk(ip->fs->dev, (uint32_t)ino->i_ino,
-                              (uint16_t)new_mode)) return -1;
-    ino->i_mode = new_mode;
+    if (attr->valid & VFS_IATTR_MODE) {
+        uint32_t new_mode = (ino->i_mode & VFS_S_IFMT) | (attr->mode & 07777u);
+        if (!ext2_write_mode_disk(ip->fs->dev, (uint32_t)ino->i_ino,
+                                  (uint16_t)new_mode)) return -1;
+        ino->i_mode = new_mode;
+    }
+
+    if (attr->valid & (VFS_IATTR_UID | VFS_IATTR_GID)) {
+        uint32_t uid = (attr->valid & VFS_IATTR_UID) ? attr->uid : ino->i_uid;
+        uint32_t gid = (attr->valid & VFS_IATTR_GID) ? attr->gid : ino->i_gid;
+        if (uid > 65535u || gid > 65535u) return -1;
+        if (!ext2_write_owner_disk(ip->fs->dev, (uint32_t)ino->i_ino,
+                                   (uint16_t)uid, (uint16_t)gid)) return -1;
+        ino->i_uid = uid;
+        ino->i_gid = gid;
+    }
+
     return 0;
 }
 static int i_truncate(struct inode *ino, uint64_t size) {
@@ -687,7 +810,17 @@ static int i_unlink(struct inode *dir, const char *name) {
     return ext2_unlink_at(dp->fs->dev, full) == 0 ? 0 : -1;
 }
 static int i_rename(struct inode *od, const char *on, struct inode *nd, const char *nn) { (void)od;(void)on;(void)nd;(void)nn; return -1; }
-static int i_symlink(struct inode *d, const char *n, const char *t) { (void)d;(void)n;(void)t; return -1; }
+static int i_symlink(struct inode *d, const char *n, const char *t) {
+    ext2_inode_priv_t *dp;
+    char full[VFS_PATH_MAX];
+
+    if (!d || !n || !*n || !t || !*t) return -1;
+    dp = (ext2_inode_priv_t*)d->i_private;
+    if (!dp || !dp->fs || !dp->fs->dev || !dp->is_dir) return -1;
+
+    join_relpath(dp->rel ? dp->rel : "", n, full, sizeof full);
+    return ext2_symlink_at(dp->fs->dev, full, t) == 0 ? 0 : -1;
+}
 
 /* forward (above) */
 static int i_open(struct inode *ino, struct file **out, int flags, uint32_t mode) {
@@ -717,8 +850,22 @@ static int i_open(struct inode *ino, struct file **out, int flags, uint32_t mode
     fp->writable = (accmode != VFS_O_RDONLY);
     fp->dirty = false;
 
+    /* Writable opens that do not truncate must preserve existing bytes.
+     * This is required for append and also gives ordinary positioned writes
+     * sane overwrite semantics. */
+    if (fp->writable && ino->i_ino != 0 && !(flags & VFS_O_TRUNC)) {
+        uint8_t *existing = NULL;
+        size_t existing_len = 0;
+        if (ext2_read_file_at(ip->fs->dev, ip->rel,
+                              &existing, &existing_len) != 0) {
+            free(fp); free(f); return -1;
+        }
+        fp->buf = existing;
+        fp->len = fp->cap = existing_len;
+    }
+
     f->f_inode = ino;
-    f->f_pos   = 0;
+    f->f_pos   = (flags & VFS_O_APPEND) ? fp->len : 0;
     f->f_flags = flags;
     f->f_op    = &EXT2_FOPS_FILE;
     f->private_data = fp;
@@ -730,6 +877,7 @@ static int i_open(struct inode *ino, struct file **out, int flags, uint32_t mode
 static const inode_ops_t EXT2_IOPS = {
     .lookup   = i_lookup,
     .mkdir    = i_mkdir,
+    .mknod    = i_mknod,
     .rmdir    = NULL,
     .unlink   = i_unlink,
     .rename   = i_rename,

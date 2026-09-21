@@ -1,0 +1,11 @@
+Package: a
+Version: 2
+Architecture: amd64
+Depends: b (= 2)
+Filename: pool/a_2_amd64.deb
+
+Package: b
+Version: 2
+Architecture: amd64
+Depends: a (= 1)
+Filename: pool/b_2_amd64.deb

@@ -103,7 +103,10 @@ int mkfs_fat_format(const mkfs_fat_opts_t *opt){
     FILE *f = fopen(opt->image_path,"r+b");
     if(!f){ perror("open"); return 1; }
 
-    uint64_t bytes = fsize(f);
+    uint64_t backing_bytes = fsize(f);
+    uint64_t base_bytes = (uint64_t)opt->lba_offset * bps;
+    uint64_t bytes = opt->size_bytes ? opt->size_bytes :
+                     (backing_bytes > base_bytes ? backing_bytes - base_bytes : 0);
     if (bytes < 100ull * 512){
         fprintf(stderr,"mkfs_fat: image too small\n");
         fclose(f);

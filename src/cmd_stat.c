@@ -11,6 +11,7 @@
 #include <time.h>
 
 #include "vfs.h"
+#include "app_printf.h"
 #include "vfs_stat.h"
 
 static const char *type_str(uint32_t mode)
@@ -71,19 +72,23 @@ int cmd_stat(int argc, char **argv)
     time_to_str(st.st_atim.tv_sec, at, sizeof at);
     time_to_str(st.st_ctim.tv_sec, ct, sizeof ct);
 
-    printf("Path: %s\n", path);
-    printf("Type: %s\n", type_str(st.st_mode));
-    printf("Mode: %o\n", (unsigned)(st.st_mode & 07777u));
-    printf("Size: %" PRIu64 "\n", st.st_size);
-    printf("Links: %" PRIu32 "\n", st.st_nlink);
-    printf("UID: %" PRIu32 "\n", st.st_uid);
-    printf("GID: %" PRIu32 "\n", st.st_gid);
-    printf("Inode: %" PRIu64 "\n", st.st_ino);
-    printf("Blocks: %" PRIu64 "\n", st.st_blocks);
-    printf("Block size: %" PRIu32 "\n", st.st_blksize);
-    printf("Access: %s\n", at);
-    printf("Modify: %s\n", mt);
-    printf("Change: %s\n", ct);
+    app_printf("Path: %s\n", path);
+    app_printf("Type: %s\n", type_str(st.st_mode));
+    app_printf("Mode: %o\n", (unsigned)(st.st_mode & 07777u));
+    app_printf("Size: %" PRIu64 "\n", st.st_size);
+    app_printf("Links: %" PRIu32 "\n", st.st_nlink);
+    app_printf("UID: %" PRIu32 "\n", st.st_uid);
+    app_printf("GID: %" PRIu32 "\n", st.st_gid);
+    if (VFS_S_ISCHR(st.st_mode) || VFS_S_ISBLK(st.st_mode)) {
+        app_printf("Major: %" PRIu32 "\n", (uint32_t)(st.st_rdev >> 32));
+        app_printf("Minor: %" PRIu32 "\n", (uint32_t)st.st_rdev);
+    }
+    app_printf("Inode: %" PRIu64 "\n", st.st_ino);
+    app_printf("Blocks: %" PRIu64 "\n", st.st_blocks);
+    app_printf("Block size: %" PRIu32 "\n", st.st_blksize);
+    app_printf("Access: %s\n", at);
+    app_printf("Modify: %s\n", mt);
+    app_printf("Change: %s\n", ct);
 
     return 0;
 }

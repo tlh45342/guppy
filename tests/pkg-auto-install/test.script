@@ -1,0 +1,33 @@
+logfile pkg-auto-install.log
+create pkg-auto-install.img 32M
+use -i pkg-auto-install.img /dev/a
+gpt init /dev/a
+gpt add /dev/a --type linuxfs --name rootfs --start 1M --size 100%
+partscan /dev/a
+mkfs.ext2 /dev/a1
+mount /dev/a1 /target
+
+mkdir -p /target/repo/dists/test/main/binary-amd64
+lcp Packages /target/repo/dists/test/main/binary-amd64/Packages
+mkdir -p /target/repo/pool/main/a/auto-root
+mkdir -p /target/repo/pool/main/d/dep-a
+mkdir -p /target/repo/pool/main/c/cyc-a
+mkdir -p /target/repo/pool/main/c/cyc-b
+lcp auto-root_1.0-1_amd64.deb /target/repo/pool/main/a/auto-root/auto-root_1.0-1_amd64.deb
+lcp dep-a_1.0-1_amd64.deb /target/repo/pool/main/d/dep-a/dep-a_1.0-1_amd64.deb
+lcp cyc-a_1.0-1_amd64.deb /target/repo/pool/main/c/cyc-a/cyc-a_1.0-1_amd64.deb
+lcp cyc-b_1.0-1_amd64.deb /target/repo/pool/main/c/cyc-b/cyc-b_1.0-1_amd64.deb
+
+pkg repo add /target/repo
+pkg plan auto-root /target
+pkg install auto-root /target
+pkg list-installed /target
+pkg status /target auto-root
+pkg status /target dep-a
+pkg status /target cyc-a
+pkg status /target cyc-b
+stat /target/usr/share/guppy-auto/auto-root.txt
+stat /target/usr/share/guppy-auto/dep-a.txt
+stat /target/usr/share/guppy-auto/cyc-a.txt
+stat /target/usr/share/guppy-auto/cyc-b.txt
+logfile off

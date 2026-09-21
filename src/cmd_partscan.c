@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
+#include "app_printf.h"
 #include "genhd.h"   // block_rescan(), struct gendisk
 #include "vblk.h"    // g_vblk, g_vblk_count, vblk_by_name
 
@@ -38,7 +39,7 @@ static void list_children_sorted(const char *parent_name) {
         ++n;
     }
     if (n == 0) {
-        printf("partscan: no partitions registered on %s\n", parent_name);
+        app_printf("partscan: no partitions registered on %s\n", parent_name);
         return;
     }
     // simple sort by numeric suffix
@@ -51,7 +52,7 @@ static void list_children_sorted(const char *parent_name) {
             }
 
     for (int i = 0; i < n; ++i) {
-        printf("%s\n", items[i].row->name);
+        app_printf("%s\n", items[i].row->name);
     }
 }
 

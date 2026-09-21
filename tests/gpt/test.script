@@ -1,0 +1,15 @@
+logfile gpt.log
+create gpt.img 32M
+use -i gpt.img /dev/a
+gpt init /dev/a
+gpt add /dev/a linuxfs rootfs 2048 8191
+gpt add /dev/a --type linuxfs --name data --start 8192s --size 8192s
+gpt add /dev/a linuxfs overlap 4096 12287
+gpt print /dev/a
+use
+partscan --verify /dev/a
+use -i gpt.img /dev/a
+partscan --verify /dev/a
+use
+gpt print /dev/a
+logfile off

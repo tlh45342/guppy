@@ -1,0 +1,30 @@
+logfile file-ops.log
+create file-ops.img 16M
+use -i file-ops.img /dev/a
+gpt init /dev/a
+gpt add /dev/a linuxfs rootfs 2048 32734
+partscan /dev/a
+mkfs.ext2 /dev/a1
+mount /dev/a1 /target
+mkdir -p /target/work/nested
+cd /target/work
+pwd
+echo alpha-version > source.txt
+cat source.txt
+stat source.txt
+cp source.txt copy.txt
+cat copy.txt
+cp source.txt nested
+cat nested/source.txt
+ls -l .
+rm copy.txt
+echo recreated-copy > copy.txt
+cat copy.txt
+rm copy.txt
+cd nested
+pwd
+cd ..
+pwd
+cat source.txt
+ls -l .
+logfile off

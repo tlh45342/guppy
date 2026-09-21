@@ -1,0 +1,29 @@
+logfile pkg-repo-lifecycle.log
+create repo-test.img 32M
+use -i repo-test.img /dev/a
+gpt init /dev/a
+gpt add /dev/a --type linuxfs --name rootfs --start 1M --size 100%
+partscan /dev/a
+mkfs.ext2 /dev/a1
+mount /dev/a1 /target
+
+mkdir -p /target/repo1/dists/test/main/binary-amd64
+mkdir -p /target/repo1/pool/main/s/script-test
+lcp Packages1 /target/repo1/dists/test/main/binary-amd64/Packages
+lcp script-test.deb /target/repo1/pool/main/s/script-test/script-test_1.0-1_amd64.deb
+
+mkdir -p /target/repo2/dists/test/main/binary-amd64
+lcp Packages2 /target/repo2/dists/test/main/binary-amd64/Packages
+
+pkg repo add /target/repo1
+pkg repo add /target/repo2
+pkg repo list
+pkg lookup script-test
+pkg path script-test
+pkg scripts script-test
+pkg repo delete 1
+pkg repo list
+pkg lookup helper-test
+pkg repo clear
+pkg repo list
+logfile off

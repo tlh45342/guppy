@@ -1,0 +1,19 @@
+logfile rm-test.log
+create rm-test.img 16M
+use -i rm-test.img /dev/a
+gpt init /dev/a
+gpt add /dev/a linuxfs rootfs 2048 32734
+partscan /dev/a
+mkfs.ext2 /dev/a1
+mount /dev/a1 /target
+mkdir /target/work
+echo first-version > /target/work/delete-me.txt
+echo keep-version > /target/work/keep.txt
+cat /target/work/delete-me.txt
+rm /target/work/delete-me.txt
+echo recreated-version > /target/work/delete-me.txt
+cat /target/work/delete-me.txt
+rm /target/work/delete-me.txt
+cat /target/work/keep.txt
+ls -l /target/work
+logfile off

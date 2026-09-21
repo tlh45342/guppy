@@ -6,6 +6,7 @@
 
 #include "cmds.h"
 #include "vfs.h"
+#include "app_printf.h"
 
 typedef struct {
     uint32_t h[8];
@@ -143,8 +144,8 @@ static int sha256_vfs_file(const char *path) {
 
     uint8_t digest[32];
     sha256_final(&ctx, digest);
-    for (unsigned i = 0; i < sizeof digest; ++i) printf("%02x", digest[i]);
-    printf("  %s\n", path);
+    for (unsigned i = 0; i < sizeof digest; ++i) app_printf("%02x", digest[i]);
+    app_printf("  %s\n", path);
     return 0;
 }
 

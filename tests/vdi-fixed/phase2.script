@@ -1,0 +1,11 @@
+logfile -a vdi-fixed.log
+
+; Fresh Guppy process: reopen the VDI and prove persistence.
+use -i fixed-test.vdi /dev/a
+partscan /dev/a
+gpt print /dev/a
+mount /dev/a1 /target
+cat /target/etc/vdi-test.txt
+stat /target/etc/vdi-test.txt
+
+logfile off

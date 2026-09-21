@@ -1,0 +1,28 @@
+logfile pkg.log
+
+; Inspect the package container and payload.
+pkg info local:control-test.deb
+pkg contents local:control-test.deb
+
+; Inspect Debian control metadata and dependency parsing.
+pkg control local:control-test.deb
+pkg depends local:control-test.deb
+
+; Build an offline EXT2 target and install the package into it.
+create pkg.img 16M
+use -i pkg.img /dev/a
+gpt init /dev/a
+gpt add /dev/a linuxfs rootfs 2048 32734
+partscan /dev/a
+mkfs.ext2 /dev/a1 --label PKGTEST
+mount /dev/a1 /target
+
+pkg install local:control-test.deb /target
+
+; Prove payload and dpkg-style installed state.
+cat /target/usr/share/guppy-control-test
+cat /target/var/lib/dpkg/status
+cat /target/var/lib/dpkg/info/guppy-control-test.list
+stat /target/var/lib/dpkg/info/guppy-control-test.postinst
+
+logfile off

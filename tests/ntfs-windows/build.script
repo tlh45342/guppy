@@ -1,0 +1,23 @@
+logfile ntfs-windows.log
+
+; NTFS Pass-5 external Windows probe.
+; Build a modest fixed VHD so Windows Disk Management can attach exactly the
+; container/partition/filesystem stack Guppy generated.
+create ntfs-windows.vhd 64M
+diskq ntfs-windows.vhd
+use -i ntfs-windows.vhd /dev/a
+
+; GPT with a Microsoft Basic Data partition at the normal 1 MiB boundary.
+gpt init /dev/a
+gpt add /dev/a --type msbasic --name data --start 1MiB --size 100%
+partscan /dev/a
+gpt print /dev/a
+
+; Format the partition with the current NTFS formatter (Pass 5).
+mkfs.ntfs /dev/a1 -v
+
+; Re-read the outer layers after NTFS metadata has been written.
+gpt print /dev/a
+diskq ntfs-windows.vhd
+
+logfile off

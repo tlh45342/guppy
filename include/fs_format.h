@@ -6,6 +6,7 @@
 typedef struct {
     const char *image_path;   // required
     uint32_t    lba_offset;   // default 0
+    uint64_t    size_bytes;   // 0 = backing file remainder; nonzero bounds a vblk/partition
     uint16_t    bytes_per_sec; // default 512
     uint8_t     sec_per_clus; // 0 = auto
     int         fat_type;     // 12,16,32; -1 = auto
@@ -21,6 +22,7 @@ int mkfs_fat_format(const mkfs_fat_opts_t *opt);
 typedef struct {
     const char *image_path;     // required
     uint32_t    lba_offset;     // default 0
+    uint64_t    size_bytes;     // 0 = backing file remainder; nonzero bounds a vblk/partition
     uint16_t    bytes_per_sec;  // default 512
     uint8_t     sec_per_clus;   // default 8 (4 KiB clusters on 512B sectors)
     uint32_t    mft_start_clus; // default 4

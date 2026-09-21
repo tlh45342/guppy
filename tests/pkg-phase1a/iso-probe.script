@@ -1,0 +1,3 @@
+use -i H:\debian-13.6.0-amd64-netinst.iso /dev/b
+mount /dev/b /iso
+ls /iso/pool/main/b/base-files

@@ -1,0 +1,9 @@
+logfile -a metadata.log
+use -i metadata.img /dev/a
+partscan /dev/a
+mount /dev/a1 /target
+stat /target/usr/bin/guppy-test
+chmod 600 /target/usr/bin/guppy-test
+stat /target/usr/bin/guppy-test
+cat /target/usr/bin/guppy-test
+logfile off

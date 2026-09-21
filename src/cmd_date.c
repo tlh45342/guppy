@@ -6,6 +6,7 @@
 
 #include <stdio.h>
 #include <time.h>
+#include "app_printf.h"
 
 static int local_tm(time_t now, struct tm *out)
 {
@@ -40,6 +41,6 @@ int cmd_date(int argc, char **argv)
         return 1;
     }
 
-    puts(text);
+    app_printf("%s\n", text);
     return 0;
 }

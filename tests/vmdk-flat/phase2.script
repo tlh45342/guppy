@@ -1,0 +1,12 @@
+logfile -a vmdk-flat.log
+
+; Fresh Guppy process: reopen through the descriptor and prove persistence.
+use -i fixed-test.vmdk /dev/a
+partscan /dev/a
+gpt print /dev/a
+mount /dev/a1 /target
+cat /target/etc/vmdk-test.txt
+stat /target/etc/vmdk-test.txt
+diskq fixed-test.vmdk
+
+logfile off

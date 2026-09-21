@@ -1,0 +1,6 @@
+; append-mode proves the prior logfile is retained
+logfile -a utility-output.log
+version
+lcat host-input.txt
+logfile
+logfile off

@@ -1,0 +1,10 @@
+logfile vmdk-boot.log
+
+; Deliberately no GPT/filesystem here: this test isolates guest LBA 0.
+create boot-test.vmdk 20M --vmdk-type flat
+diskq boot-test.vmdk
+use -i boot-test.vmdk /dev/a
+write /dev/a boot.bin 0
+diskq boot-test.vmdk
+
+logfile off

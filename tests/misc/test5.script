@@ -1,2 +1,0 @@
-use -i image2.img /dev/a
-gpt print /dev/a

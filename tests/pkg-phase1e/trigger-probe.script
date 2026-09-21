@@ -1,0 +1,21 @@
+logfile base-files-trigger-probe.log
+
+; Round 14 diagnostic probe.
+; Read the REAL Debian base-files trigger control member before package install.
+; This is intentionally read-only: no target image is created and no package state is changed.
+
+use -i H:\debian-13.6.0-amd64-netinst.iso /dev/b
+mount /dev/b /iso
+
+echo === base-files control metadata ===
+pkg control-file /iso/pool/main/b/base-files/base-files_13.8+deb13u6_amd64.deb control
+
+echo === base-files triggers: BEGIN ===
+pkg control-file /iso/pool/main/b/base-files/base-files_13.8+deb13u6_amd64.deb triggers
+echo === base-files triggers: END ===
+
+echo === base-files preinst: BEGIN ===
+pkg control-file /iso/pool/main/b/base-files/base-files_13.8+deb13u6_amd64.deb preinst
+echo === base-files preinst: END ===
+
+logfile off

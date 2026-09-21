@@ -1,0 +1,21 @@
+logfile pkg-plan.log
+create pkg-plan.img 32M
+use -i pkg-plan.img /dev/a
+gpt init /dev/a
+gpt add /dev/a --type linuxfs --name rootfs --start 1M --size 100%
+partscan /dev/a
+mkfs.ext2 /dev/a1
+mount /dev/a1 /target
+
+mkdir -p /target/repo/dists/test/main/binary-amd64
+lcp Packages /target/repo/dists/test/main/binary-amd64/Packages
+mkdir -p /target/var/lib/dpkg
+lcp status /target/var/lib/dpkg/status
+
+pkg repo add /target/repo
+pkg repo list
+pkg lookup coreutils
+pkg list-installed /target
+pkg status /target libc6
+pkg plan coreutils /target
+logfile off

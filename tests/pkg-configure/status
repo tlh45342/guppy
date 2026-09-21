@@ -1,0 +1,6 @@
+Package: config-demo
+Version: 1.0-1
+Status: install ok unpacked
+Architecture: amd64
+Description: synthetic controlled configuration fixture
+

@@ -1,0 +1,20 @@
+logfile vdi-fixed.log
+
+; A .vdi extension selects the VDI backend. Current creation is fixed/full.
+create fixed-test.vdi 20M
+use -i fixed-test.vdi /dev/a
+use
+
+; Prove normal disk construction works through the VDI backend.
+gpt init /dev/a
+gpt add /dev/a linuxfs rootfs 2048 40926
+partscan /dev/a
+gpt print /dev/a
+mkfs.ext2 /dev/a1 --label VDIFIXED
+mount /dev/a1 /target
+mkdir -p /target/etc
+echo vdi-fixed-persistence > /target/etc/vdi-test.txt
+cat /target/etc/vdi-test.txt
+stat /target/etc/vdi-test.txt
+
+logfile off

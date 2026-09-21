@@ -1,0 +1,10 @@
+logfile phase1.log
+create --sparse torture.vdi 64M
+diskq torture.vdi
+use -i torture.vdi /dev/a
+write /dev/a partial.bin 4096
+write /dev/a cross.bin 1048568
+write /dev/a middle.bin 3145851
+write /dev/a tail.bin 66060411
+diskq torture.vdi
+logfile off

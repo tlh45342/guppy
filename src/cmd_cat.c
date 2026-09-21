@@ -7,6 +7,7 @@
 #endif
 
 #include "vfs.h"
+#include "app_printf.h"
 
 int cmd_cat(int argc, char **argv) {
     if (argc < 2) {
@@ -36,7 +37,7 @@ int cmd_cat(int argc, char **argv) {
         }
         if (n == 0) break; /* EOF */
 
-        size_t w = fwrite(buf, 1, (size_t)n, stdout);
+        size_t w = app_write(buf, (size_t)n);
         if (w != (size_t)n) {
             fprintf(stderr, "cat: write error to stdout\n");
             vfs_close(f);

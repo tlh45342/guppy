@@ -1,0 +1,13 @@
+create first.img 16M
+use -i first.img /dev/a
+gpt init /dev/a
+gpt add /dev/a linuxfs rootfs 2048 12000
+partscan --verify /dev/a
+create second.img 16M
+use -i second.img /dev/a
+logfile device-registry.log
+use
+partscan --verify /dev/a
+partscan /dev/a
+partscan --verify /dev/a
+logfile off
