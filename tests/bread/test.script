@@ -1,0 +1,6 @@
+logfile bread.log
+create -f raw bread.img 1M --mbr
+use -i bread.img /dev/a
+bread /dev/a 0
+bread /dev/a 1 2
+logfile off

@@ -1,5 +1,7 @@
 #define _FILE_OFFSET_BITS 64
 #include "vdisk_internal.h"
+#include <time.h>
+#include <stdint.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -106,11 +108,33 @@ static int vmdk_create(vdisk_t *d,uint64_t size_bytes) {
     FILE *efp;
     uint64_t sectors;
     unsigned cyl;
+    char uuid_lines[320] = "";
     if((d->create_flags & VDISK_CREATE_VMDK_LAYOUT_MASK)!=VDISK_CREATE_VMDK_FLAT)return -1;
     if(size_bytes%512ULL)size_bytes=(size_bytes+511ULL)&~511ULL;
     sectors=size_bytes/512ULL;
     if(make_flat_name(d->path,extent_name,sizeof extent_name,extent_path,sizeof extent_path)!=0)return -1;
     cyl=(unsigned)(sectors/(255ULL*63ULL)); if(cyl==0)cyl=1;
+    if(d->create_uuid_set) {
+        unsigned char mod_uuid[16];
+        unsigned i;
+        uint64_t seed=(uint64_t)time(NULL) ^ (uint64_t)(uintptr_t)d;
+        for(i=0;i<16;i++) { seed=seed*6364136223846793005ULL+1442695040888963407ULL; mod_uuid[i]=(unsigned char)(seed>>56); }
+        mod_uuid[6]=(unsigned char)((mod_uuid[6]&0x0f)|0x40);
+        mod_uuid[8]=(unsigned char)((mod_uuid[8]&0x3f)|0x80);
+        if(snprintf(uuid_lines,sizeof uuid_lines,
+            "ddb.uuid.image=\"%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x\"\n"
+            "ddb.uuid.modification=\"%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x\"\n"
+            "ddb.uuid.parent=\"00000000-0000-0000-0000-000000000000\"\n"
+            "ddb.uuid.parentmodification=\"00000000-0000-0000-0000-000000000000\"\n",
+            d->create_uuid[0],d->create_uuid[1],d->create_uuid[2],d->create_uuid[3],
+            d->create_uuid[4],d->create_uuid[5],d->create_uuid[6],d->create_uuid[7],
+            d->create_uuid[8],d->create_uuid[9],d->create_uuid[10],d->create_uuid[11],
+            d->create_uuid[12],d->create_uuid[13],d->create_uuid[14],d->create_uuid[15],
+            mod_uuid[0],mod_uuid[1],mod_uuid[2],mod_uuid[3],
+            mod_uuid[4],mod_uuid[5],mod_uuid[6],mod_uuid[7],
+            mod_uuid[8],mod_uuid[9],mod_uuid[10],mod_uuid[11],
+            mod_uuid[12],mod_uuid[13],mod_uuid[14],mod_uuid[15]) >= (int)sizeof uuid_lines) return -1;
+    }
     if(fprintf(d->fp,
         "# Disk DescriptorFile\n"
         "version=1\n"
@@ -125,8 +149,9 @@ static int vmdk_create(vdisk_t *d,uint64_t size_bytes) {
         "ddb.adapterType = \"lsilogic\"\n"
         "ddb.geometry.cylinders = \"%u\"\n"
         "ddb.geometry.heads = \"255\"\n"
-        "ddb.geometry.sectors = \"63\"\n",
-        (unsigned long long)sectors,extent_name,cyl)<0 || fflush(d->fp)!=0)return -1;
+        "ddb.geometry.sectors = \"63\"\n"
+        "%s",
+        (unsigned long long)sectors,extent_name,cyl,uuid_lines)<0 || fflush(d->fp)!=0)return -1;
     efp=fopen(extent_path,"wb+"); if(!efp)return -1;
     if(size_host_file(efp,size_bytes)!=0){fclose(efp);remove(extent_path);return -1;}
     fclose(d->fp);d->fp=efp;

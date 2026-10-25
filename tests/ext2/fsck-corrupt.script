@@ -1,0 +1,3 @@
+use -i fsck-phase1-corrupt.img /dev/a
+partscan /dev/a
+fsck.ext2 /dev/a1

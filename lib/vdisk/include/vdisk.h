@@ -58,6 +58,8 @@ int vdisk_open(const char *path, vdisk_format_t format, vdisk_t **out);
 int vdisk_create(const char *path, vdisk_format_t format, uint64_t size_bytes, vdisk_t **out);
 int vdisk_create_ex(const char *path, vdisk_format_t format, uint64_t size_bytes,
                     unsigned flags, vdisk_t **out);
+int vdisk_create_ex_uuid(const char *path, vdisk_format_t format, uint64_t size_bytes,
+                         unsigned flags, const uint8_t uuid[16], vdisk_t **out);
 void vdisk_close(vdisk_t *disk);
 
 int vdisk_read(vdisk_t *disk, uint64_t offset, void *buf, size_t len);

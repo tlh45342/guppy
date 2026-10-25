@@ -1,0 +1,4 @@
+logfile -a mbr-install.log
+use -i mbr-install.img /dev/a
+mbr install /dev/a boot.bin
+bread /dev/a 0

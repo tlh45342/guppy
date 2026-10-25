@@ -20,6 +20,8 @@ struct vdisk {
     bool writable;
     vdisk_format_t format;
     unsigned create_flags;
+    bool create_uuid_set;
+    unsigned char create_uuid[16];
 };
 
 struct vdisk_driver {

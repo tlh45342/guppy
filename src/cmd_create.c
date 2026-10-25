@@ -36,6 +36,23 @@ static const char *vmdk_type_name(unsigned f) {
     }
 }
 
+static int parse_uuid(const char *s, unsigned char out[16]) {
+    unsigned i=0, hi=0, have_hi=0;
+    if(!s||!out)return -1;
+    while(*s) {
+        unsigned v;
+        if(*s=='-'){s++;continue;}
+        if(*s>='0'&&*s<='9')v=(unsigned)(*s-'0');
+        else if(*s>='a'&&*s<='f')v=(unsigned)(*s-'a'+10);
+        else if(*s>='A'&&*s<='F')v=(unsigned)(*s-'A'+10);
+        else return -1;
+        if(!have_hi){hi=v;have_hi=1;}
+        else {if(i>=16)return -1;out[i++]=(unsigned char)((hi<<4)|v);have_hi=0;}
+        s++;
+    }
+    return (!have_hi&&i==16)?0:-1;
+}
+
 static vdisk_format_t parse_format(const char *s) {
     if(!s)return VDISK_FMT_AUTO;
     if(strcmp(s,"raw")==0)return VDISK_FMT_RAW;
@@ -47,13 +64,15 @@ static vdisk_format_t parse_format(const char *s) {
 }
 
 int cmd_create(int argc,char **argv) {
-    const char *img=NULL; uint64_t size_bytes=0; bool use_mbr=false, sparse=false;
+    const char *img=NULL; uint64_t size_bytes=0; bool use_mbr=false, sparse=false, have_uuid=false;
+    unsigned char uuid[16];
     unsigned vmdk_type=0, create_flags=0;
     vdisk_format_t format=VDISK_FMT_AUTO; vdisk_t *disk=NULL;
     int i;
     if(argc<3) {
         fprintf(stderr,"usage: create [-f raw|vdi|vhd|vmdk] <img> <size> [options]\n");
         fprintf(stderr,"       VMDK: --vmdk-type flat|monolithic-flat|monolithic-sparse|split-flat|split-sparse\n");
+        fprintf(stderr,"       VDI/VMDK: --uuid 01234567-89ab-cdef-0123-456789abcdef\n");
         return 2;
     }
     for(i=1;i<argc;i++) {
@@ -71,6 +90,14 @@ int cmd_create(int argc,char **argv) {
         } else if(starts_with(argv[i],"--vmdk-type=")) {
             const char *v=strchr(argv[i],'=')+1; vmdk_type=parse_vmdk_type(v);
             if(!vmdk_type){fprintf(stderr,"create: unsupported VMDK type '%s'\n",v);return 2;}
+        } else if(strcmp(argv[i],"--uuid")==0) {
+            if(i+1>=argc){fprintf(stderr,"create: --uuid requires a value\n");return 2;}
+            if(parse_uuid(argv[++i],uuid)!=0){fprintf(stderr,"create: invalid UUID '%s'\n",argv[i]);return 2;}
+            have_uuid=true;
+        } else if(starts_with(argv[i],"--uuid=")) {
+            const char *v=strchr(argv[i],'=')+1;
+            if(parse_uuid(v,uuid)!=0){fprintf(stderr,"create: invalid UUID '%s'\n",v);return 2;}
+            have_uuid=true;
         } else if(strcmp(argv[i],"--size")==0) {
             int ok=0; if(i+1>=argc){fprintf(stderr,"create: --size requires a value\n");return 2;}
             size_bytes=parse_size(argv[++i],&ok); if(!ok||!size_bytes){fprintf(stderr,"create: invalid --size value\n");return 2;}
@@ -87,12 +114,13 @@ int cmd_create(int argc,char **argv) {
     if(format==VDISK_FMT_AUTO){format=vdisk_format_from_extension(img);if(format==VDISK_FMT_AUTO)format=VDISK_FMT_RAW;}
     if(format!=VDISK_FMT_RAW&&format!=VDISK_FMT_VDI&&format!=VDISK_FMT_VHD&&format!=VDISK_FMT_VMDK){fprintf(stderr,"create: format '%s' is not implemented yet\n",vdisk_format_name(format));return 2;}
     if(vmdk_type && format!=VDISK_FMT_VMDK){fprintf(stderr,"create: --vmdk-type requires VMDK format\n");return 2;}
+    if(have_uuid && format!=VDISK_FMT_VDI && format!=VDISK_FMT_VMDK){fprintf(stderr,"create: --uuid is currently supported only for VDI and VMDK\n");return 2;}
     if(format==VDISK_FMT_VMDK && !vmdk_type)vmdk_type=VDISK_CREATE_VMDK_FLAT;
     if(format==VDISK_FMT_VMDK && sparse){fprintf(stderr,"create: use --vmdk-type monolithic-sparse or split-sparse for sparse VMDK layouts\n");return 2;}
     if(format==VDISK_FMT_VMDK && vmdk_type!=VDISK_CREATE_VMDK_FLAT){fprintf(stderr,"create: VMDK type '%s' is recognized but not implemented yet\n",vmdk_type_name(vmdk_type));return 2;}
     if(sparse && format!=VDISK_FMT_VDI){fprintf(stderr,"create: --sparse is currently supported only for VDI\n");return 2;}
     create_flags=(sparse?VDISK_CREATE_SPARSE:0)|vmdk_type;
-    if(vdisk_create_ex(img,format,size_bytes,create_flags,&disk)!=0){fprintf(stderr,"create: failed to create %s image '%s'\n",vdisk_format_name(format),img);return 1;}
+    if(vdisk_create_ex_uuid(img,format,size_bytes,create_flags,have_uuid?uuid:NULL,&disk)!=0){fprintf(stderr,"create: failed to create %s image '%s'\n",vdisk_format_name(format),img);return 1;}
     if(use_mbr) {
         unsigned char mbr[512]={0}; mbr[510]=0x55;mbr[511]=0xaa;
         if(vdisk_write(disk,0,mbr,sizeof(mbr))!=0||vdisk_flush(disk)!=0){fprintf(stderr,"create: failed to write blank MBR\n");vdisk_close(disk);return 1;}

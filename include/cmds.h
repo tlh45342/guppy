@@ -23,6 +23,7 @@ int  guppy_exit_requested(void);
 void guppy_clear_exit_request(void);
 
 // commands
+int cmd_bread(int argc, char **argv);
 int cmd_create(int argc, char **argv);
 int cmd_do(int argc, char **argv);
 int cmd_diskq(int argc, char **argv);
@@ -43,6 +44,7 @@ int cmd_mknod(int argc, char **argv);
 int cmd_cp(int argc, char **argv);
 int cmd_mount(int argc, char **argv);
 int cmd_mkfs_ext2(int argc, char **argv);
+int cmd_fsck_ext2(int argc, char **argv);
 int cmd_cd(int argc, char **argv);
 int cmd_cat(int argc, char **argv);
 int cmd_debug(int, char**);
@@ -63,3 +65,8 @@ int cmd_hexdump(int argc, char **argv);
 int cmd_write(int argc, char **argv);
 int cmd_ln(int argc, char **argv);
 int cmd_readlink(int argc, char **argv);
+
+int cmd_dpkg_deb(int argc, char **argv);
+int cmd_tar(int argc, char **argv);
+int cmd_xz(int argc, char **argv);
+int cmd_ar(int argc, char **argv);

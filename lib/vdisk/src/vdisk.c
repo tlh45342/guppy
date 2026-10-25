@@ -119,8 +119,8 @@ int vdisk_open(const char *path,vdisk_format_t format,vdisk_t **out) {
     if(drv->open(d)!=0){vdisk_close(d);return -1;}
     *out=d; return 0;
 }
-int vdisk_create_ex(const char *path,vdisk_format_t format,uint64_t n,
-                    unsigned flags,vdisk_t **out) {
+int vdisk_create_ex_uuid(const char *path,vdisk_format_t format,uint64_t n,
+                         unsigned flags,const uint8_t uuid[16],vdisk_t **out) {
     vdisk_t *d; const vdisk_driver_t *drv;
     int rc;
     if(!path||!out||!n) return -1;
@@ -134,11 +134,16 @@ int vdisk_create_ex(const char *path,vdisk_format_t format,uint64_t n,
     if((flags & VDISK_CREATE_SPARSE) && !drv->create_sparse) return -1;
     d=(vdisk_t*)calloc(1,sizeof(*d)); if(!d)return -1;
     d->path=dupstr(path); d->driver=drv; d->format=format; d->writable=true; d->create_flags=flags;
+    if(uuid) { memcpy(d->create_uuid,uuid,16); d->create_uuid_set=true; }
     if(!d->path){free(d);return -1;}
     d->fp=fopen(path,"wb+"); if(!d->fp){vdisk_close(d);return -1;}
     rc=(flags & VDISK_CREATE_SPARSE) ? drv->create_sparse(d,n) : drv->create(d,n);
     if(rc!=0){vdisk_close(d);return -1;}
     *out=d; return 0;
+}
+int vdisk_create_ex(const char *path,vdisk_format_t format,uint64_t n,
+                    unsigned flags,vdisk_t **out) {
+    return vdisk_create_ex_uuid(path,format,n,flags,NULL,out);
 }
 int vdisk_create(const char *path,vdisk_format_t format,uint64_t n,vdisk_t **out) {
     return vdisk_create_ex(path,format,n,0,out);

@@ -363,7 +363,8 @@ static int f_release(struct file *f) {
 
     ext2_file_priv_t *fp = (ext2_file_priv_t*)f->private_data;
     if (fp) {
-        if (fp->writable && fp->dirty &&
+        /* O_CREAT of an empty file still needs an on-disk inode/dirent. */
+        if (fp->writable && (fp->dirty || (f->f_inode && f->f_inode->i_ino == 0)) &&
             fp->node && fp->node->rel && fp->node->fs && fp->node->fs->dev) {
             /* Preserve an existing inode when rewriting/appending.  Newly
              * created VFS inodes have i_ino == 0 until the first flush. */

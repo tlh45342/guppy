@@ -98,7 +98,8 @@ static int vdi_open(vdisk_t *d) {
 
 static int init_header(unsigned char h[VDI_HEADER_BYTES], uint64_t size_bytes,
                        uint32_t image_type, uint32_t blocks,
-                       uint32_t off_blocks, uint32_t off_data) {
+                       uint32_t off_blocks, uint32_t off_data,
+                       const unsigned char image_uuid[16]) {
     unsigned char uuid[16];
     memset(h,0,VDI_HEADER_BYTES);
     memcpy(h,"<<< Guppy VirtualBox Disk Image >>>\n",35);
@@ -116,7 +117,8 @@ static int init_header(unsigned char h[VDI_HEADER_BYTES], uint64_t size_bytes,
     put32(h+0x17c,0);
     put32(h+0x180,blocks);
     put32(h+0x184,image_type==VDI_IMAGE_TYPE_FIXED ? blocks : 0);
-    make_uuid(uuid); memcpy(h+0x188,uuid,16);
+    if(image_uuid) memcpy(h+0x188,image_uuid,16);
+    else { make_uuid(uuid); memcpy(h+0x188,uuid,16); }
     make_uuid(uuid); memcpy(h+0x198,uuid,16);
     return 0;
 }
@@ -177,7 +179,7 @@ static int vdi_create_fixed(vdisk_t *d, uint64_t size_bytes) {
     if(size_bytes>UINT64_MAX-off_data) return -1;
     host_size=(uint64_t)off_data+size_bytes;
 
-    init_header(h,size_bytes,VDI_IMAGE_TYPE_FIXED,blocks,off_blocks,off_data);
+    init_header(h,size_bytes,VDI_IMAGE_TYPE_FIXED,blocks,off_blocks,off_data,d->create_uuid_set?d->create_uuid:NULL);
     if(vdisk_host_write(d->fp,0,h,sizeof h)!=0) return -1;
     if(write_map(d,blocks,off_blocks,off_data,1)!=0) return -1;
     if(vdisk_host_seek(d->fp,host_size-1)!=0 ||
@@ -202,7 +204,7 @@ static int vdi_create_sparse(vdisk_t *d, uint64_t size_bytes) {
     if(!d || !d->fp) return -1;
     if(layout_for(&size_bytes,&blocks,&off_blocks,&off_data)!=0) return -1;
 
-    init_header(h,size_bytes,VDI_IMAGE_TYPE_DYNAMIC,blocks,off_blocks,off_data);
+    init_header(h,size_bytes,VDI_IMAGE_TYPE_DYNAMIC,blocks,off_blocks,off_data,d->create_uuid_set?d->create_uuid:NULL);
     if(vdisk_host_write(d->fp,0,h,sizeof h)!=0) return -1;
     if(write_map(d,blocks,off_blocks,off_data,0)!=0) return -1;
 

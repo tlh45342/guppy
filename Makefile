@@ -4,7 +4,7 @@
 CSTD     ?= -std=c11
 WARN     ?= -Wall -Wextra
 OPT      ?= -O2
-CPPFLAGS ?= -Iinclude -Isrc -Ilib/vdisk/include -Ilib/xz -DXZ_USE_CRC64
+CPPFLAGS ?= -Iinclude -Isrc -Ilib/vdisk/include -Ilib/xz -Ilib/xzenc -DXZ_USE_CRC64 -D_7ZIP_ST
 LDFLAGS  ?=
 LDLIBS   ?=
 
@@ -78,9 +78,13 @@ OBJS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS))
 XZ_DIR := lib/xz
 XZ_SRCS := $(XZ_DIR)/xz_crc32.c $(XZ_DIR)/xz_crc64.c $(XZ_DIR)/xz_dec_lzma2.c $(XZ_DIR)/xz_dec_stream.c
 XZ_OBJS := $(patsubst $(XZ_DIR)/%.c,$(BUILD_DIR)/xz_%.o,$(XZ_SRCS))
-DEPS := $(OBJS:.o=.d) $(XZ_OBJS:.o=.d)
+XZENC_DIR := lib/xzenc
+XZENC_NAMES := 7zAlloc 7zCrc 7zCrcOpt Alloc Bra Bra86 BraIA64 CpuArch Delta LzFind LzmaEnc Lzma2Enc LzmaDec Lzma2Dec Sha256 Xz XzDec XzCrc64 XzCrc64Opt XzEnc
+XZENC_SRCS := $(addprefix $(XZENC_DIR)/,$(addsuffix .c,$(XZENC_NAMES)))
+XZENC_OBJS := $(patsubst $(XZENC_DIR)/%.c,$(BUILD_DIR)/xzenc_%.o,$(XZENC_SRCS))
+DEPS := $(OBJS:.o=.d) $(XZ_OBJS:.o=.d) $(XZENC_OBJS:.o=.d)
 
-.PHONY: all clean distclean run test test-pkg-repo-lifecycle test-pkg-repo-gzip test-pkg-plan test-pkg-auto-install test-pkg-audit test-pkg-dash-preunpack test-pkg-base-passwd-preunpack test-pkg-base-files-preunpack test-pkg-libc6-configure test-pkg-configure test-pkg-plan-conflict test-file-ops test-ext2-mknod test-vmdk-flat test-vmdk-boot test-vmdk-layouts test-vhd-fixed test-vhd-ntfs-basic test-ntfs-windows test-vdi-fixed test-vdi-sparse test-vdi-sparse-scale test-vdi-sparse-torture test-diskq test-disk-output test-debian study-debian repo-audit print-config print-shell install uninstall vdisk test-ntfs-check
+.PHONY: all clean distclean run test test-pkg-repo-lifecycle test-pkg-repo-gzip test-pkg-plan test-pkg-auto-install test-pkg-audit test-pkg-dash-preunpack test-pkg-base-passwd-preunpack test-pkg-base-files-preunpack test-pkg-libc6-configure test-pkg-configure test-pkg-plan-conflict test-file-ops test-ext2-mknod test-mbr-install test-uuid-create test-vmdk-flat test-vmdk-boot test-vmdk-layouts test-vhd-fixed test-vhd-ntfs-basic test-ntfs-windows test-vdi-fixed test-vdi-sparse test-vdi-sparse-scale test-vdi-sparse-torture test-diskq test-disk-output test-debian study-debian repo-audit print-config print-shell install uninstall vdisk test-ntfs-check
 
 all: $(BIN)
 
@@ -91,13 +95,17 @@ $(VDISK_LIB): $(VDISK_DEPS)
 	@$(MAKE) --no-print-directory -C $(VDISK_DIR)
 
 
-$(BIN): $(OBJS) $(XZ_OBJS) $(VDISK_LIB) | $(BIN_DIR)
-	$(CC) $(OBJS) $(XZ_OBJS) $(VDISK_LIB) $(LDFLAGS) $(LDLIBS) -o $@
+$(BIN): $(OBJS) $(XZ_OBJS) $(XZENC_OBJS) $(VDISK_LIB) | $(BIN_DIR)
+	$(PYTHON) tools/build_number.py $(BUILD_DIR)/build_number.c BUILD_NUMBER
+	$(CC) $(CSTD) $(WARN) $(OPT) $(BUILD_DIR)/build_number.c $(OBJS) $(XZ_OBJS) $(XZENC_OBJS) $(VDISK_LIB) $(LDFLAGS) $(LDLIBS) -o $@
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR) $(INC_DIR)/version.h
 	$(CC) $(CSTD) $(WARN) $(OPT) $(CPPFLAGS) -MMD -MP -c $< -o $@
 
 $(BUILD_DIR)/xz_%.o: $(XZ_DIR)/%.c | $(BUILD_DIR)
+	$(CC) $(CSTD) $(WARN) $(OPT) $(CPPFLAGS) -MMD -MP -c $< -o $@
+
+$(BUILD_DIR)/xzenc_%.o: $(XZENC_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CSTD) $(WARN) $(OPT) $(CPPFLAGS) -MMD -MP -c $< -o $@
 
 $(BUILD_DIR):
@@ -148,8 +156,36 @@ test-pkg-plan-conflict: $(BIN)
 test-file-ops: $(BIN)
 	@$(MAKE) --no-print-directory -C tests test-file-ops GUPPY=../$(BIN)
 
+test-fsck-ext2: $(BIN)
+	@$(PYTHON) tests/ext2/test_fsck_phase1.py
+
+# Exploratory create/delete churn; currently exposes a file reuse regression.
+test-fsck-ext2-churn: $(BIN)
+	@$(PYTHON) tests/ext2/test_fsck_churn.py
+
+test-fsck-ext2-churn-large: $(BIN)
+	@$(PYTHON) tests/ext2/test_fsck_churn_large.py
+
+test-fsck-ext2-multigroup: $(BIN)
+	@$(PYTHON) tests/ext2/test_fsck_multigroup.py
+
+test-tar-writer: $(BIN)
+	@$(PYTHON) tests/ext2/test_tar_writer.py
+
+test-ar-writer: $(BIN)
+	@$(PYTHON) tests/ext2/test_ar_writer.py
+
+test-bread: $(BIN)
+	@$(MAKE) --no-print-directory -C tests/bread test GUPPY=../../$(BIN)
+
 test-ext2-mknod: $(BIN)
 	@$(MAKE) --no-print-directory -C tests/ext2-mknod test GUPPY=../../$(BIN)
+
+test-mbr-install: $(BIN)
+	@$(MAKE) --no-print-directory -C tests/mbr-install test GUPPY=../../$(BIN)
+
+test-uuid-create: $(BIN)
+	@$(MAKE) --no-print-directory -C tests/uuid-create test GUPPY=../../$(BIN)
 
 test-vmdk-flat: $(BIN)
 	@$(MAKE) --no-print-directory -C tests test-vmdk-flat GUPPY=../$(BIN)

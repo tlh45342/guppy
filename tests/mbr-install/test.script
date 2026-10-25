@@ -1,0 +1,6 @@
+logfile mbr-install.log
+create -f raw mbr-install.img 8M
+use -i mbr-install.img /dev/a
+gpt init /dev/a
+gpt add /dev/a --type linuxfs --name linux --start 1MiB --size 6MiB
+bread /dev/a 0

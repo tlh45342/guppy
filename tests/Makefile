@@ -24,10 +24,12 @@ VERBOSE ?= 1
 ISO ?= H:\debian-13.6.0-amd64-netinst.iso
 REFERENCE_ISO ?= media/guppy-reference.iso
 
-.PHONY: test test-pkg test-pkg-scripts test-pkg-script-show test-pkg-preunpack test-pkg-dash-preunpack test-pkg-base-passwd-preunpack test-pkg-base-files-preunpack test-pkg-libc6-configure test-pkg-configure test-pkg-repo-lifecycle test-pkg-repo-gzip test-pkg-plan test-pkg-auto-install test-pkg-audit test-pkg-plan-conflict test-app-printf test-symlink test-file-ops test-ext2-mknod test-vmdk-flat test-vmdk-boot test-vmdk-layouts test-vhd-fixed test-vhd-ntfs-basic test-ntfs-windows test-vdi-fixed test-vdi-sparse test-vdi-sparse-scale test-vdi-sparse-torture test-diskq test-disk-output test-iso test-debian study-debian clean
+.PHONY: test test-pkg test-pkg-scripts test-pkg-script-show test-pkg-preunpack test-pkg-dash-preunpack test-pkg-base-passwd-preunpack test-pkg-base-files-preunpack test-pkg-libc6-configure test-pkg-configure test-pkg-repo-lifecycle test-pkg-repo-gzip test-pkg-plan test-pkg-auto-install test-pkg-audit test-pkg-plan-conflict test-app-printf test-symlink test-file-ops test-ext2-mknod test-mbr-install test-uuid-create test-vmdk-flat test-vmdk-boot test-vmdk-layouts test-vhd-fixed test-vhd-ntfs-basic test-ntfs-windows test-vdi-fixed test-vdi-sparse test-vdi-sparse-scale test-vdi-sparse-torture test-diskq test-disk-output test-iso test-debian study-debian clean
 
 test:
 	@$(PYTHON) run_regression.py --guppy "$(GUPPY)" --reference-iso "$(REFERENCE_ISO)" --suite default
+	@$(MAKE) --no-print-directory -C mbr-install test GUPPY="$(abspath $(GUPPY))"
+	@$(MAKE) --no-print-directory -C uuid-create test GUPPY="$(abspath $(GUPPY))"
 
 test-pkg:
 	@$(PYTHON) run_regression.py --guppy "$(GUPPY)" --reference-iso "$(REFERENCE_ISO)" pkg
@@ -83,8 +85,17 @@ test-symlink:
 test-file-ops:
 	@$(PYTHON) run_regression.py --guppy "$(GUPPY)" file-ops
 
+test-bread:
+	@$(MAKE) --no-print-directory -C bread test GUPPY="$(GUPPY)"
+
 test-ext2-mknod:
 	@$(MAKE) --no-print-directory -C ext2-mknod test GUPPY="$(abspath $(GUPPY))"
+
+test-mbr-install:
+	@$(MAKE) --no-print-directory -C mbr-install test GUPPY="$(abspath $(GUPPY))"
+
+test-uuid-create:
+	@$(MAKE) --no-print-directory -C uuid-create test GUPPY="$(abspath $(GUPPY))"
 
 test-vmdk-flat:
 	@$(PYTHON) run_regression.py --guppy "$(GUPPY)" vmdk-flat
@@ -139,7 +150,10 @@ ifeq ($(VERBOSE),1)
 	@echo Cleaning test artifacts
 endif
 	-@$(MAKE) --no-print-directory -C file-ops clean VERBOSE=$(VERBOSE)
+	-@$(MAKE) --no-print-directory -C bread clean VERBOSE=$(VERBOSE)
 	-@$(MAKE) --no-print-directory -C ext2-mknod clean VERBOSE=$(VERBOSE)
+	-@$(MAKE) --no-print-directory -C mbr-install clean VERBOSE=$(VERBOSE)
+	-@$(MAKE) --no-print-directory -C uuid-create clean VERBOSE=$(VERBOSE)
 	-@$(MAKE) --no-print-directory -C pkg clean VERBOSE=0
 	-@$(MAKE) --no-print-directory -C pkg-scripts clean VERBOSE=0
 	-@$(MAKE) --no-print-directory -C pkg-script-show clean VERBOSE=0

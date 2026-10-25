@@ -14,6 +14,7 @@
 #include "cmds.h"
 #include "version.h"
 #include "logfile.h"
+#include "deb_build.h"
 
 // ---------- small helpers ----------
 

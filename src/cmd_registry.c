@@ -30,6 +30,8 @@ static int icmp(const char *s1, const char *s2) {
    -------------------------------------------------------------------------- */
 
 static const Command g_cmds[] = {
+    { "ar",        cmd_ar,        "ar -q ARCHIVE.a FILE [FILE ...] # create host ar archive" },
+    { "bread",     cmd_bread,     "bread <device> <lba> [count] # hex dump logical block(s)" },
     { "cat",       cmd_cat,       "cat <path> [path...]" },
     { "cd",        cmd_cd,        "cd [path]  (cd / if omitted; supports .., ., and cd -)" },
     { "chmod",     cmd_chmod,     "chmod <octal-mode> <path>  # change VFS permission bits" },
@@ -38,6 +40,7 @@ static const Command g_cmds[] = {
     { "date",      cmd_date,      "date                      # print host local date/time" },
     { "debug",     cmd_debug,     "debug [iso|vfs|all] [on|off|toggle]" },
     { "diskq",     cmd_diskq,     "diskq <image>             # read-only container/partition sanity report" },
+    { "dpkg-deb",  cmd_dpkg_deb,  "dpkg-deb --build STAGING OUTPUT.deb [--xz]" },
     { "do",        cmd_do,        "do <scriptfile>           # run commands from file" },
     { "echo",      cmd_echo,      "echo [-n] words... [ >|>> /path ]" },
     { "exit",      cmd_exit,      "exit                      # quit REPL" },
@@ -52,10 +55,11 @@ static const Command g_cmds[] = {
     { "ln",        cmd_ln,        "ln -s <target> <link>     # create VFS symbolic link" },
     { "logfile",   cmd_logfile,   "logfile [off|-a <file>|<file>] # session/test log" },
     { "ls",        cmd_ls,        "ls [-l] [-a] [path]       # list files or mounts at '/'" },
-    { "mbr",       cmd_mbr,       "mbr print <img|/dev/X>" },
+    { "mbr",       cmd_mbr,       "mbr install <device> <boot-file> # install <=446-byte bootstrap; preserve partition table" },
     { "mkdir",     cmd_mkdir,     "mkdir <path>" },
     { "mknod",     cmd_mknod,     "mknod <path> <c|b> <major> <minor> # create VFS device node" },
-    { "mkfs.ext2", cmd_mkfs_ext2, "mkfs.ext2 <dev> --part N [--label NAME]" },
+    { "mkfs.ext2", cmd_mkfs_ext2, "mkfs.ext2 <dev> [--label NAME]" },
+    { "fsck.ext2", cmd_fsck_ext2, "fsck.ext2 <dev> # read-only geometry/bitmap check" },
     { "mkfs.fat",  cmd_mkfs_fat,  "Format /dev/* as FAT12/16/32" },
     { "mkfs.ntfs", cmd_mkfs_ntfs, "Write minimal NTFS boot sector (probe-only)" },
     { "mkfs_vfat", cmd_mkfs_vfat, "Format /dev/* as FAT (VFAT defaults)" },
@@ -70,10 +74,12 @@ static const Command g_cmds[] = {
     { "readlink",  cmd_readlink,  "readlink <path>           # print VFS symbolic-link target" },
     { "rm",        cmd_rm,        "rm <path> [path...]       # remove VFS regular file(s)" },
     { "sha256",    cmd_sha256,    "sha256 <path> [path...]   # SHA-256 of VFS file(s)" },
+    { "tar",       cmd_tar,       "tar -cf ARCHIVE.tar DIRECTORY # create host TAR archive" },
     { "stat",      cmd_stat,      "stat file/device" },
     { "use",       cmd_use,       "use -i <image> <dev> | use # map/list devices (/dev/a, /dev/b, ...)" },
     { "useradd",   cmd_useradd,   "useradd -R <root> [options] <name> # offline account creation" },
     { "version",   cmd_version,   "displays version information" },
+    { "xz",        cmd_xz,        "xz INPUT OUTPUT.xz # compress host file" },
     { "write",     cmd_write,     "write <dev> <local-file> [offset] # raw host file -> device/partition" },
 };
 

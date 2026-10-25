@@ -1,6 +1,6 @@
 # Guppy
 
-**Current version: 0.0.47**
+**Current version: 0.0.48** (build 25)
 
 **Guppy** is a portable, scriptable environment for constructing, inspecting,
 and manipulating offline disk and system images. It is written in C and treats
@@ -147,11 +147,15 @@ bringing together.
 - Offline `useradd` and `passwd` support for a mounted target root.
 - Debian `.deb` inspection and offline `pkg install` support, including
   TAR/XZ payload extraction and dpkg-style state recording.
-- Embedded XZ decoding through XZ Embedded; no external `xz` executable is
+- NEW 10/25/2026 - Embedded XZ decoding through XZ Embedded; no external `xz` executable is
   required for the supported package path.
 - Runtime-selectable debugging.
 - A growing scripted regression suite; the 0.0.44 development checkpoint has
   17 default regression groups after introduction of `diskq`.
+- NEW - fsck.ext2 ~ 10/25/2026 - BASIC (read only)
+- NEW - dpkg-build 10/25/2026 - so we can build .deb files
+- NEW - tar 10/25/2026
+- NEW - ar 10/25/2026
 
 More detailed implementation notes have moved to the `docs/` directory so the
 README can remain an introduction rather than becoming the entire manual.
